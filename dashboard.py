@@ -411,7 +411,7 @@ else:
 
 dias = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"]
 meses = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"]
-hoy = datetime.now()
+hoy = ahora
 fecha_str = f"{dias[hoy.weekday()]} {hoy.day} de {meses[hoy.month-1]} de {hoy.year}"
 
 st.markdown(f'<div class="greeting">{saludo}, Oswaldo</div>', unsafe_allow_html=True)
