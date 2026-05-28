@@ -22,7 +22,7 @@ import os
 import json
 import sqlite3
 import time
-from datetime import datetime
+from datetime import datetime timezone, timedelta
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -399,7 +399,9 @@ if "chat_msgs" not in st.session_state:
     st.session_state.chat_msgs = []
 
 # Saludo dinámico
-hora = datetime.now().hour
+hora = mexico_tz = timezone(timedelta(hours=-6))
+ahora = datetime.now(mexico_tz)
+hora = ahora.hour
 if hora < 12:
     saludo = "Buenos días"
 elif hora < 18:
