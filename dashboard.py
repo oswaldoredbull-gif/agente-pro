@@ -29,7 +29,14 @@ from dotenv import load_dotenv
 from anthropic import Anthropic
 
 load_dotenv()
-
+# Cargar secrets de Streamlit Cloud si existen
+try:
+    if "ANTHROPIC_API_KEY" in st.secrets:
+        os.environ["ANTHROPIC_API_KEY"] = st.secrets["ANTHROPIC_API_KEY"]
+    if "OPENWEATHER_API_KEY" in st.secrets:
+        os.environ["OPENWEATHER_API_KEY"] = st.secrets["OPENWEATHER_API_KEY"]
+except Exception:
+    pass
 st.set_page_config(
     page_title="Mi Dashboard",
     page_icon="🏠",
