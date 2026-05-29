@@ -28,6 +28,8 @@ import smtplib
 import csv
 import time
 import logging
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
@@ -670,7 +672,19 @@ def main():
     app.add_handler(CommandHandler("memoria", cmd_memoria))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, manejar_mensaje))
     app.add_handler(MessageHandler(filters.Document.ALL, manejar_documento))
-
+# Servidor web para Render health check
+    class HealthHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"Bot activo")
+        def log_message(self, format, *args):
+            pass
+    
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), HealthHandler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    print(f"  🌐 Health check en puerto {port}")
     # Iniciar bot
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
