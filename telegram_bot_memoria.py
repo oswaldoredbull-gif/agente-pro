@@ -159,7 +159,7 @@ def leer_excel_csv(ruta_archivo, max_filas=20):
         return f"Error: {str(e)}"
 
 
-DB_PATH = import platform
+import platform
 if platform.system() == "Windows":
     DB_PATH = r"C:\Users\omurillo\.gemini\antigravity\scratch\claude_agent\agente_datos.db"
 else:
