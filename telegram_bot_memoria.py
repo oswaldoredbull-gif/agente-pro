@@ -157,7 +157,11 @@ def leer_excel_csv(ruta_archivo, max_filas=20):
         return f"Error: {str(e)}"
 
 
-DB_PATH = r"C:\Users\omurillo\.gemini\antigravity\scratch\claude_agent\agente_datos.db"
+DB_PATH = import platform
+if platform.system() == "Windows":
+    DB_PATH = r"C:\Users\omurillo\.gemini\antigravity\scratch\claude_agent\agente_datos.db"
+else:
+    DB_PATH = "agente_datos.db"
 
 def inicializar_db():
     conn = sqlite3.connect(DB_PATH); c = conn.cursor()
