@@ -185,6 +185,11 @@ def inicializar_db():
 
 
 def consultar_base_datos(sql):
+    """Usa Supabase si está configurado, si no usa SQLite local."""
+    if os.environ.get("SUPABASE_URL"):
+        from db_supabase import consultar_sql
+        return consultar_sql(sql)
+    
     up = sql.strip().upper()
     if any(p in up for p in ["DROP","DELETE","ALTER","TRUNCATE"]): return "Operación no permitida."
     try:
