@@ -19,9 +19,8 @@ EJECUCIÓN:
 
 import streamlit as st
 import os
-import json
-import sqlite3
 import time
+import requests
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -29,14 +28,20 @@ from dotenv import load_dotenv
 from anthropic import Anthropic
 
 load_dotenv()
+
 # Cargar secrets de Streamlit Cloud si existen
 try:
     if "ANTHROPIC_API_KEY" in st.secrets:
         os.environ["ANTHROPIC_API_KEY"] = st.secrets["ANTHROPIC_API_KEY"]
     if "OPENWEATHER_API_KEY" in st.secrets:
         os.environ["OPENWEATHER_API_KEY"] = st.secrets["OPENWEATHER_API_KEY"]
+    if "SUPABASE_URL" in st.secrets:
+        os.environ["SUPABASE_URL"] = st.secrets["SUPABASE_URL"]
+    if "SUPABASE_KEY" in st.secrets:
+        os.environ["SUPABASE_KEY"] = st.secrets["SUPABASE_KEY"]
 except Exception:
     pass
+
 st.set_page_config(
     page_title="Mi Dashboard",
     page_icon="🏠",
@@ -240,60 +245,10 @@ st.markdown("""
 
 
 # =============================================================
-# BASE DE DATOS
+# BASE DE DATOS (Supabase - compartida en la nube)
 # =============================================================
 
-DB_PATH = r"C:\Users\omurillo\.gemini\antigravity\scratch\claude_agent\agente_datos.db"
-
-def init_db():
-    conn = sqlite3.connect(DB_PATH); c = conn.cursor()
-    c.execute("CREATE TABLE IF NOT EXISTS contactos (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT NOT NULL, email TEXT, telefono TEXT, notas TEXT, creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
-    c.execute("CREATE TABLE IF NOT EXISTS tareas (id INTEGER PRIMARY KEY AUTOINCREMENT, titulo TEXT NOT NULL, descripcion TEXT, estado TEXT DEFAULT 'pendiente', prioridad TEXT DEFAULT 'media', creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
-    c.execute("SELECT COUNT(*) FROM contactos")
-    if c.fetchone()[0] == 0:
-        c.executemany("INSERT INTO contactos (nombre, email, telefono, notas) VALUES (?, ?, ?, ?)",
-            [("Ana García","ana@ejemplo.com","33-1234-5678","Cliente principal"),
-             ("Carlos López","carlos@ejemplo.com","81-9876-5432","Proveedor"),
-             ("María Rodríguez","maria@ejemplo.com","55-5555-1234","Socia")])
-    c.execute("SELECT COUNT(*) FROM tareas")
-    if c.fetchone()[0] == 0:
-        c.executemany("INSERT INTO tareas (titulo, descripcion, estado, prioridad) VALUES (?, ?, ?, ?)",
-            [("Revisar propuesta","Propuesta del cliente","pendiente","alta"),
-             ("Enviar reporte","Reporte mensual","pendiente","media"),
-             ("Llamar a proveedor","Negociar precios","completada","baja")])
-    conn.commit(); conn.close()
-
-def get_tareas(estado=None):
-    conn = sqlite3.connect(DB_PATH); c = conn.cursor()
-    if estado:
-        c.execute("SELECT id, titulo, descripcion, estado, prioridad FROM tareas WHERE estado=? ORDER BY CASE prioridad WHEN 'alta' THEN 1 WHEN 'media' THEN 2 ELSE 3 END", (estado,))
-    else:
-        c.execute("SELECT id, titulo, descripcion, estado, prioridad FROM tareas ORDER BY CASE prioridad WHEN 'alta' THEN 1 WHEN 'media' THEN 2 ELSE 3 END")
-    rows = c.fetchall(); conn.close()
-    return rows
-
-def get_contactos():
-    conn = sqlite3.connect(DB_PATH); c = conn.cursor()
-    c.execute("SELECT id, nombre, email, telefono, notas FROM contactos ORDER BY nombre")
-    rows = c.fetchall(); conn.close()
-    return rows
-
-def add_tarea(titulo, descripcion="", prioridad="media"):
-    conn = sqlite3.connect(DB_PATH); c = conn.cursor()
-    c.execute("INSERT INTO tareas (titulo, descripcion, prioridad) VALUES (?, ?, ?)", (titulo, descripcion, prioridad))
-    conn.commit(); conn.close()
-
-def complete_tarea(task_id):
-    conn = sqlite3.connect(DB_PATH); c = conn.cursor()
-    c.execute("UPDATE tareas SET estado='completada' WHERE id=?", (task_id,))
-    conn.commit(); conn.close()
-
-def add_contacto(nombre, email="", telefono="", notas=""):
-    conn = sqlite3.connect(DB_PATH); c = conn.cursor()
-    c.execute("INSERT INTO contactos (nombre, email, telefono, notas) VALUES (?, ?, ?, ?)", (nombre, email, telefono, notas))
-    conn.commit(); conn.close()
-
-init_db()
+from db_supabase import get_tareas, get_contactos, add_tarea, complete_tarea, add_contacto, consultar_sql
 
 
 # =============================================================
@@ -353,19 +308,7 @@ def chat_agente(mensaje):
             st.session_state.chat_msgs = st.session_state.chat_msgs[-20:]
 
         def exec_sql(sql):
-            up = sql.strip().upper()
-            if any(p in up for p in ["DROP","DELETE","ALTER","TRUNCATE"]): return "No permitido."
-            conn = sqlite3.connect(DB_PATH); c = conn.cursor(); c.execute(sql)
-            if up.startswith("SELECT"):
-                cols = [d[0] for d in c.description] if c.description else []
-                rows = c.fetchall()
-                if not rows: res = "Sin resultados."
-                else:
-                    res = f"Columnas: {', '.join(cols)}\n"
-                    for r in rows: res += " | ".join(str(v) for v in r) + "\n"
-            else:
-                conn.commit(); res = f"OK. Filas: {c.rowcount}"
-            conn.close(); return res
+            return consultar_sql(sql)
 
         msgs = list(st.session_state.chat_msgs)
         while True:
@@ -399,7 +342,7 @@ if "chat_msgs" not in st.session_state:
     st.session_state.chat_msgs = []
 
 # Saludo dinámico
-hora = mexico_tz = timezone(timedelta(hours=-6))
+mexico_tz = timezone(timedelta(hours=-6))
 ahora = datetime.now(mexico_tz)
 hora = ahora.hour
 if hora < 12:
