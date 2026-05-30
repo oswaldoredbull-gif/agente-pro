@@ -55,6 +55,7 @@ from memoria import (
     agregar_intercambio, verificar_actualizacion_resumen,
     listar_hechos
 )
+from alertas import iniciar_sistema_alertas
 
 # Configurar logging
 logging.basicConfig(
@@ -496,7 +497,15 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"/limpiar - Borrar historial de sesión\n"
         f"/herramientas - Ver herramientas\n"
         f"/estado - Ver estado del agente"
+        f"/alertas - Activar recordatorios\n"
     )
+    # Iniciar sistema de alertas para este usuario
+    chat_id = update.effective_chat.id
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+    if bot_token and not hasattr(cmd_start, '_alertas_iniciadas'):
+        iniciar_sistema_alertas(bot_token, chat_id)
+        cmd_start._alertas_iniciadas = True
+
     await update.message.reply_text(bienvenida, parse_mode="Markdown")
 
 
