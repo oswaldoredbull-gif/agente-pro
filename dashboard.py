@@ -53,7 +53,7 @@ st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap');
     .stApp {
-        background: linear-gradient(160deg, #1a0a2e 0%, #2d1b4e 40%, #1e0f3a 100%);
+        background: linear-gradient(160deg, #3b1f6e 0%, #4e2d8a 40%, #3a1f7a 100%);
     }
     input, textarea, select, .stTextInput input, .stSelectbox select {
         color: #e2e8f0 !important;
