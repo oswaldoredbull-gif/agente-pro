@@ -1,4 +1,4 @@
-"""
+﻿"""
 =============================================================
 🏠 DASHBOARD PERSONAL - Tu centro de comando diario
 =============================================================
@@ -53,7 +53,16 @@ st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap');
     .stApp {
-        background: linear-gradient(160deg, #0a0a1a 0%, #111133 40%, #0d0d2b 100%);
+        background: linear-gradient(160deg, #1a0a2e 0%, #2d1b4e 40%, #1e0f3a 100%);
+    }
+    input, textarea, select, .stTextInput input, .stSelectbox select {
+        color: #e2e8f0 !important;
+        background: rgba(255,255,255,0.08) !important;
+        border: 1px solid rgba(167,139,250,0.3) !important;
+        border-radius: 8px !important;
+    }
+    .stTextInput label, .stSelectbox label {
+        color: #c4b5fd !important;
     }
 
     .greeting {
