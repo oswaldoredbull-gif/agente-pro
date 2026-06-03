@@ -53,7 +53,7 @@ st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap');
     .stApp {
-        background: linear-gradient(160deg, #3b1f6e 0%, #4e2d8a 40%, #3a1f7a 100%);
+        background: linear-gradient(160deg, #7e22ce 0%, #9333ea 40%, #6b21a8 100%);
     }
     input, textarea, select, .stTextInput input, .stSelectbox select {
         color: #e2e8f0 !important;
@@ -104,13 +104,18 @@ st.markdown("""
         padding: 10px 14px;
         border-radius: 10px;
         margin: 6px 0;
-        background: rgba(255,255,255,0.03);
-        border: 1px solid rgba(255,255,255,0.04);
+        background: rgba(255,255,255,0.07);
+        border: 1px solid rgba(255,255,255,0.10);
         transition: all 0.2s;
     }
     .task-item:hover { background: rgba(255,255,255,0.06); }
-    .task-title { font-size: 14px; color: #e2e8f0; flex: 1; }
-    .task-desc { font-size: 12px; color: #64748b; }
+    .task-title { font-size: 14px; color: #ffffff; flex: 1; font-weight: 500; }
+    .task-desc { font-size: 12px; color: #e9d5ff; }
+    .task-item.p-alta-bg { background: rgba(239,68,68,0.18); border: 1px solid rgba(239,68,68,0.3); }
+    .task-item.p-media-bg { background: rgba(245,158,11,0.18); border: 1px solid rgba(245,158,11,0.3); }
+    .task-item.p-baja-bg { background: rgba(34,197,94,0.18); border: 1px solid rgba(34,197,94,0.3); }
+    .card-header { font-size: 14px; font-weight: 500; color: #e9d5ff; margin-bottom: 14px; }
+    .date-text { font-size: 15px; color: #d8b4fe; margin-bottom: 28px; }
     .priority-dot {
         width: 8px;
         height: 8px;
@@ -397,7 +402,7 @@ with col_left:
             col_task, col_btn = st.columns([5, 1])
             with col_task:
                 st.markdown(
-                    f'<div class="task-item">'
+                    f'<div class="task-item p-{prio}-bg">'
                     f'<div class="priority-dot {dot_class}"></div>'
                     f'<div><div class="task-title">{titulo}</div>'
                     f'<div class="task-desc">{desc or ""}</div></div>'
