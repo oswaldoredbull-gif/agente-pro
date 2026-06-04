@@ -281,14 +281,14 @@ from db_supabase import get_tareas, get_contactos, add_tarea, complete_tarea, ad
 # FUNCIONES DE DATOS
 # =============================================================
 
-def get_clima():
+def get_clima(ciudad="Guadalajara"):
     ak = os.getenv("OPENWEATHER_API_KEY")
     if not ak:
         return {"temp": "--", "desc": "Configura OPENWEATHER_API_KEY", "city": "---", "humidity": "--", "wind": "--", "min": "--", "max": "--"}
     try:
         import requests
         r = requests.get("https://api.openweathermap.org/data/2.5/weather",
-            params={"q": "Guadalajara,MX", "appid": ak, "units": "metric", "lang": "es"}, timeout=5)
+            params={"q": ciudad, "appid": ak, "units": "metric", "lang": "es"}, timeout=5)
         d = r.json()
         if r.status_code == 200:
             return {
@@ -402,7 +402,7 @@ with col_left:
     with c2:
         st.markdown(f'<div class="stat-mini"><div class="stat-mini-num" style="color:#34d399">{len(tareas_completadas)}</div><div class="stat-mini-label">Completadas</div></div>', unsafe_allow_html=True)
     with c3:
-        st.markdown(f'<div class="stat-mini"><div class="stat-mini-num" style="color:#a78bfa">{len(contactos)}</div><div class="stat-mini-label">Contactos</div></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="stat-mini"><div class="stat-mini-num" style="color:#a78bfa">IA</div><div class="stat-mini-label">Chatea con IA</div></div>', unsafe_allow_html=True)
 
     # Tareas pendientes
     st.markdown('<div class="dash-card"><div class="card-header">📋 Tareas pendientes</div>', unsafe_allow_html=True)
@@ -449,8 +449,14 @@ with col_left:
 with col_mid:
     # Clima
     st.markdown('<div class="dash-card"><div class="card-header">🌤️ Clima ahora</div>', unsafe_allow_html=True)
+    if "ciudad_clima" not in st.session_state:
+        st.session_state.ciudad_clima = "Guadalajara"
+    ciudad_input = st.text_input("Ciudad", value=st.session_state.ciudad_clima, placeholder="Ej: Monterrey, CDMX", label_visibility="collapsed")
+    if st.button("Actualizar clima", use_container_width=True):
+        st.session_state.ciudad_clima = ciudad_input
+        st.rerun()
     with st.spinner("Cargando clima..."):
-        clima = get_clima()
+        clima = get_clima(st.session_state.ciudad_clima)
     st.markdown(
         f'<div class="weather-big">{clima["temp"]}°C</div>'
         f'<div class="weather-city">{clima["city"]}</div>'
