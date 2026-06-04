@@ -386,8 +386,8 @@ fecha_str = f"{dias[hoy.weekday()]} {hoy.day} de {meses[hoy.month-1]} de {hoy.ye
 st.markdown(f'<div class="greeting">{saludo}, Oswaldo</div>', unsafe_allow_html=True)
 st.markdown(f'<div class="date-text">{fecha_str} — {hoy.strftime("%H:%M")}</div>', unsafe_allow_html=True)
 
-# Layout principal: 3 columnas
-col_left, col_mid, col_right = st.columns([1.2, 1, 1])
+# Layout principal: 2 columnas
+col_left, col_right = st.columns([1.6, 1])
 
 # === COLUMNA IZQUIERDA: TAREAS ===
 with col_left:
@@ -445,8 +445,8 @@ with col_left:
     st.markdown('</div>', unsafe_allow_html=True)
 
 
-# === COLUMNA CENTRAL: CLIMA + NOTICIAS ===
-with col_mid:
+# === COLUMNA DERECHA: CLIMA + NOTICIAS + CONTACTOS + CHAT ===
+with col_right:
     # Clima
     st.markdown('<div class="dash-card"><div class="card-header">🌤️ Clima ahora</div>', unsafe_allow_html=True)
     if "ciudad_clima" not in st.session_state:
@@ -472,8 +472,14 @@ with col_mid:
 
     # Noticias
     st.markdown('<div class="dash-card"><div class="card-header">📰 Noticias del día</div>', unsafe_allow_html=True)
+    if "tema_noticias" not in st.session_state:
+        st.session_state.tema_noticias = "tecnología inteligencia artificial México"
+    tema_input = st.text_input("Tema", value=st.session_state.tema_noticias, placeholder="Ej: finanzas, deportes, política", label_visibility="collapsed")
+    if st.button("Actualizar noticias", use_container_width=True):
+        st.session_state.tema_noticias = tema_input
+        st.rerun()
     with st.spinner("Cargando noticias..."):
-        noticias = get_noticias()
+        noticias = get_noticias(st.session_state.tema_noticias)
     for n in noticias[:4]:
         st.markdown(
             f'<div class="news-item">'
@@ -485,8 +491,7 @@ with col_mid:
     st.markdown('</div>', unsafe_allow_html=True)
 
 
-# === COLUMNA DERECHA: CONTACTOS + CHAT ===
-with col_right:
+# === CONTACTOS + CHAT (dentro de col_right) ===
     # Contactos
     st.markdown('<div class="dash-card"><div class="card-header">👥 Contactos</div>', unsafe_allow_html=True)
 
