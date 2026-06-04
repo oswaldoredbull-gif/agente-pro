@@ -120,13 +120,15 @@ st.markdown("""
     .task-item.p-baja-bg { background: #f0fdf4; border: 1px solid #86efac; }
     .task-item.p-baja-bg .task-title { color: #14532d; }
     .task-item.p-baja-bg .task-desc { color: #16a34a; }
-    input, textarea, select, .stTextInput input, .stSelectbox select {
+    input, textarea, select, .stTextInput input, .stSelectbox select, .stTextInput > div > div > input, [data-baseweb="input"] input, [data-baseweb="textarea"] textarea {
         color: #3b0764 !important;
         background: #ffffff !important;
         border: 1px solid rgba(109,40,217,0.3) !important;
         border-radius: 8px !important;
     }
-    .stTextInput label, .stSelectbox label { color: #4c1d95 !important; }
+    .stTextInput label, .stSelectbox label, [data-testid="stTextInput"] label { color: #4c1d95 !important; }
+    [data-baseweb="input"] { background: #ffffff !important; }
+    ::placeholder { color: #9ca3af !important; opacity: 1 !important; }
     .priority-dot {
         width: 8px;
         height: 8px;
@@ -304,11 +306,11 @@ def get_clima(ciudad="Guadalajara"):
         pass
     return {"temp": "--", "desc": "Sin conexión", "city": "---", "humidity": "--", "wind": "--", "min": "--", "max": "--"}
 
-def get_noticias():
+def get_noticias(tema="tecnología inteligencia artificial México"):
     try:
         from duckduckgo_search import DDGS
         with DDGS() as ddgs:
-            results = list(ddgs.news("tecnología inteligencia artificial México", max_results=5))
+            results = list(ddgs.news(tema, max_results=5))
         if results:
             return [{"title": r["title"], "source": r.get("source", ""), "body": r.get("body", "")[:100]} for r in results]
     except Exception:
