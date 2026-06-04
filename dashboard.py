@@ -128,7 +128,12 @@ st.markdown("""
     }
     .stTextInput label, .stSelectbox label, [data-testid="stTextInput"] label { color: #4c1d95 !important; }
     [data-baseweb="input"] { background: #ffffff !important; }
-    ::placeholder { color: #9ca3af !important; opacity: 1 !important; }
+    [data-baseweb="input"] input { color: #3b0764 !important; }
+    [data-baseweb="base-input"] { background: #ffffff !important; }
+    [data-baseweb="base-input"] input { color: #3b0764 !important; font-weight: 500 !important; }
+    ::placeholder { color: #6d28d9 !important; opacity: 0.6 !important; }
+    ::-webkit-input-placeholder { color: #6d28d9 !important; }
+    ::-moz-placeholder { color: #6d28d9 !important; }
     .priority-dot {
         width: 8px;
         height: 8px;
