@@ -659,6 +659,11 @@ def main():
     # Inicializar base de datos
     inicializar_db()
 
+    # Iniciar sistema de alertas automaticamente
+    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+    if chat_id:
+        iniciar_sistema_alertas(token, chat_id)
+        print("  Sistema de alertas iniciado")
     # Crear carpeta para archivos de Telegram
     Path("telegram_files").mkdir(exist_ok=True)
 
