@@ -53,7 +53,7 @@ st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap');
     .stApp {
-        background: linear-gradient(160deg, #7e22ce 0%, #9333ea 40%, #6b21a8 100%);
+        background: #ede9fe;
     }
     input, textarea, select, .stTextInput input, .stSelectbox select {
         color: #e2e8f0 !important;
@@ -109,13 +109,24 @@ st.markdown("""
         transition: all 0.2s;
     }
     .task-item:hover { background: rgba(255,255,255,0.06); }
-    .task-title { font-size: 14px; color: #ffffff; flex: 1; font-weight: 500; }
-    .task-desc { font-size: 12px; color: #e9d5ff; }
-    .task-item.p-alta-bg { background: rgba(239,68,68,0.18); border: 1px solid rgba(239,68,68,0.3); }
-    .task-item.p-media-bg { background: rgba(245,158,11,0.18); border: 1px solid rgba(245,158,11,0.3); }
-    .task-item.p-baja-bg { background: rgba(34,197,94,0.18); border: 1px solid rgba(34,197,94,0.3); }
-    .card-header { font-size: 14px; font-weight: 500; color: #e9d5ff; margin-bottom: 14px; }
-    .date-text { font-size: 15px; color: #d8b4fe; margin-bottom: 28px; }
+    .task-title { font-size: 14px; color: #1e0a3c; flex: 1; font-weight: 500; }
+    .task-desc { font-size: 12px; color: #6d28d9; }
+    .task-item.p-alta-bg { background: #fef2f2; border: 1px solid #fca5a5; }
+    .task-item.p-alta-bg .task-title { color: #991b1b; }
+    .task-item.p-alta-bg .task-desc { color: #dc2626; }
+    .task-item.p-media-bg { background: #fffbeb; border: 1px solid #fcd34d; }
+    .task-item.p-media-bg .task-title { color: #92400e; }
+    .task-item.p-media-bg .task-desc { color: #d97706; }
+    .task-item.p-baja-bg { background: #f0fdf4; border: 1px solid #86efac; }
+    .task-item.p-baja-bg .task-title { color: #14532d; }
+    .task-item.p-baja-bg .task-desc { color: #16a34a; }
+    input, textarea, select, .stTextInput input, .stSelectbox select {
+        color: #3b0764 !important;
+        background: #ffffff !important;
+        border: 1px solid rgba(109,40,217,0.3) !important;
+        border-radius: 8px !important;
+    }
+    .stTextInput label, .stSelectbox label { color: #4c1d95 !important; }
     .priority-dot {
         width: 8px;
         height: 8px;
