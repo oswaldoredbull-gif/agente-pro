@@ -458,6 +458,7 @@ with col_right:
     st.markdown('<div class="dash-card"><div class="card-header">🌤️ Clima ahora</div>', unsafe_allow_html=True)
     if "ciudad_clima" not in st.session_state:
         st.session_state.ciudad_clima = "Guadalajara"
+    st.markdown('<style>div[data-testid="stTextInput"] input { color: #1e0a3c !important; background-color: #ffffff !important; font-weight: 600 !important; font-size: 15px !important; } div[data-testid="stTextInput"] input::placeholder { color: #7c3aed !important; }</style>', unsafe_allow_html=True)
     ciudad_input = st.text_input("Ciudad", value=st.session_state.ciudad_clima, placeholder="Ej: Monterrey, CDMX", label_visibility="collapsed")
     if st.button("Actualizar clima", use_container_width=True):
         st.session_state.ciudad_clima = ciudad_input
@@ -481,6 +482,7 @@ with col_right:
     st.markdown('<div class="dash-card"><div class="card-header">📰 Noticias del día</div>', unsafe_allow_html=True)
     if "tema_noticias" not in st.session_state:
         st.session_state.tema_noticias = "tecnología inteligencia artificial México"
+    st.markdown('<style>div[data-testid="stTextInput"] input { color: #1e0a3c !important; background-color: #ffffff !important; font-weight: 600 !important; font-size: 15px !important; } div[data-testid="stTextInput"] input::placeholder { color: #7c3aed !important; }</style>', unsafe_allow_html=True)
     tema_input = st.text_input("Tema", value=st.session_state.tema_noticias, placeholder="Ej: finanzas, deportes, política", label_visibility="collapsed")
     if st.button("Actualizar noticias", use_container_width=True):
         st.session_state.tema_noticias = tema_input
