@@ -140,7 +140,7 @@ st.markdown("""
     .weather-big {
         font-size: 42px;
         font-weight: 700;
-        color: #e2e8f0;
+        color: #3b0764;
         line-height: 1;
     }
     .weather-city {
@@ -150,38 +150,38 @@ st.markdown("""
     }
     .weather-detail {
         font-size: 13px;
-        color: #64748b;
+        color: #4c1d95;
         margin-top: 8px;
         line-height: 1.8;
     }
 
     .news-item {
         padding: 12px 0;
-        border-bottom: 1px solid rgba(255,255,255,0.04);
+        border-bottom: 1px solid rgba(109,40,217,0.1);
     }
     .news-item:last-child { border-bottom: none; }
     .news-title {
         font-size: 14px;
-        color: #e2e8f0;
+        color: #3b0764;
         font-weight: 500;
         margin-bottom: 4px;
     }
     .news-source {
         font-size: 12px;
-        color: #64748b;
+        color: #6d28d9;
     }
 
     .contact-chip {
         display: inline-flex;
         align-items: center;
         gap: 8px;
-        background: rgba(255,255,255,0.04);
-        border: 1px solid rgba(255,255,255,0.06);
+        background: #ffffff;
+        border: 0.5px solid rgba(109,40,217,0.2);
         border-radius: 24px;
         padding: 6px 14px 6px 6px;
         margin: 4px;
         font-size: 13px;
-        color: #cbd5e1;
+        color: #3b0764;
     }
     .contact-avatar {
         width: 28px;
@@ -192,11 +192,13 @@ st.markdown("""
         justify-content: center;
         font-size: 11px;
         font-weight: 500;
+        background: #ede9fe;
+        color: #4c1d95;
     }
 
     .quick-btn {
-        background: rgba(255,255,255,0.04);
-        border: 1px solid rgba(255,255,255,0.08);
+        background: #6d28d9;
+        border: none;
         border-radius: 12px;
         padding: 14px;
         text-align: center;
@@ -207,9 +209,8 @@ st.markdown("""
         margin: 4px 0;
     }
     .quick-btn:hover {
-        background: rgba(255,255,255,0.08);
-        color: #e2e8f0;
-        border-color: rgba(96,165,250,0.3);
+        background: #4c1d95;
+        color: #ffffff;
     }
 
     .chat-msg-user {
