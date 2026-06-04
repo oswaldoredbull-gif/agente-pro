@@ -1,4 +1,4 @@
-"""
+﻿"""
 =============================================================
 🤖 AGENTE PRO - Bot de Telegram con Memoria
 =============================================================
@@ -501,11 +501,10 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     # Iniciar sistema de alertas para este usuario
     chat_id = update.effective_chat.id
-    bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+    bot_token = os.getenv("TELEGRAM_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN")
     if bot_token and not hasattr(cmd_start, '_alertas_iniciadas'):
         iniciar_sistema_alertas(bot_token, chat_id)
         cmd_start._alertas_iniciadas = True
-
     await update.message.reply_text(bienvenida, parse_mode="Markdown")
 
 
@@ -646,7 +645,7 @@ async def manejar_documento(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     """Inicia el bot de Telegram."""
-    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    token = os.getenv("TELEGRAM_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN")
 
     if not token:
         print("❌ Error: Configura TELEGRAM_BOT_TOKEN en tu archivo .env")
