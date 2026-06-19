@@ -46,7 +46,9 @@ from telegram.ext import (
     ContextTypes,
 )
 
-load_dotenv()
+load_dotenv(override=True)  # el .env siempre tiene prioridad sobre variables de sistema viejas
+_k = __import__('os').getenv('ANTHROPIC_API_KEY', '')
+print(f"ANTHROPIC_API_KEY cargada: longitud={len(_k)}, termina en ...{_k[-6:] if len(_k) > 6 else _k}")
 
 # Importar sistema de memoria
 from memoria import (
