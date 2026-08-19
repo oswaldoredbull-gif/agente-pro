@@ -1,12 +1,12 @@
-"""
+﻿"""
 =============================================================
-🔔 SISTEMA DE ALERTAS - Recordatorios por Telegram
+SISTEMA DE ALERTAS - Recordatorios por Telegram
 =============================================================
 
-Envía recordatorios automáticos según la prioridad:
-  🔴 Alta    = cada 2 horas
-  🟡 Media   = cada 4 horas
-  🟢 Baja    = día siguiente a las 8:00 AM
+Envia recordatorios automaticos segun la prioridad:
+  Alta    = cada 2 horas
+  Media   = cada 4 horas
+  Baja    = dia siguiente a las 8:00 AM (ventana de 30 min)
 
 =============================================================
 """
@@ -19,24 +19,24 @@ import requests
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-# Zona horaria de México
 MEXICO_TZ = timezone(timedelta(hours=-6))
-
-# Archivo para trackear alertas enviadas
 ALERTAS_FILE = "alertas_enviadas.json"
+HORA_ALERTA_BAJA = 8
+VENTANA_BAJA_MIN = 30
 
-# Configuración de intervalos (en horas)
-INTERVALOS = {
-    "alta": 2,
-    "media": 4,
-    "baja": None  # Se maneja diferente: solo a las 8 AM
-}
 
-HORA_ALERTA_BAJA = 8  # 8:00 AM para prioridad baja
+def _ahora_mexico():
+    return datetime.now(MEXICO_TZ)
+
+
+def _parse_fecha(s):
+    dt = datetime.fromisoformat(s)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=MEXICO_TZ)
+    return dt
 
 
 def cargar_alertas_enviadas():
-    """Carga el registro de alertas enviadas."""
     if Path(ALERTAS_FILE).exists():
         try:
             with open(ALERTAS_FILE, "r") as f:
@@ -47,16 +47,14 @@ def cargar_alertas_enviadas():
 
 
 def guardar_alertas_enviadas(alertas):
-    """Guarda el registro de alertas enviadas."""
     try:
         with open(ALERTAS_FILE, "w") as f:
-            json.dump(alertas, f)
-    except Exception:
-        pass
+            json.dump(alertas, f, indent=2)
+    except Exception as e:
+        print(f"  No se pudo guardar alertas_enviadas.json: {e}")
 
 
 def obtener_tareas_pendientes():
-    """Obtiene tareas pendientes de Supabase o SQLite."""
     supabase_url = os.environ.get("SUPABASE_URL")
     supabase_key = os.environ.get("SUPABASE_KEY")
 
@@ -67,17 +65,16 @@ def obtener_tareas_pendientes():
                 "Authorization": f"Bearer {supabase_key}",
                 "Content-Type": "application/json"
             }
-            r = requests.get(
-                f"{supabase_url}/tareas?select=*&estado=eq.pendiente&order=id.asc",
-                headers=headers, timeout=10
-            )
+            url = supabase_url.rstrip("/") + "/rest/v1/tareas?select=*&estado=eq.pendiente&order=id.asc"
+            r = requests.get(url, headers=headers, timeout=10)
             if r.status_code == 200:
                 return r.json()
+            else:
+                print(f"  Supabase respondio {r.status_code}: {r.text[:100]}")
         except Exception as e:
-            print(f"Error obteniendo tareas: {e}")
+            print(f"  Error obteniendo tareas de Supabase: {e}")
         return []
     else:
-        # Fallback a SQLite local
         try:
             import sqlite3
             import platform
@@ -92,12 +89,12 @@ def obtener_tareas_pendientes():
             rows = c.fetchall()
             conn.close()
             return [dict(zip(cols, row)) for row in rows]
-        except Exception:
+        except Exception as e:
+            print(f"  Error obteniendo tareas de SQLite: {e}")
             return []
 
 
 def enviar_alerta_telegram(bot_token, chat_id, mensaje):
-    """Envía un mensaje de alerta por Telegram."""
     try:
         url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
         data = {
@@ -106,54 +103,56 @@ def enviar_alerta_telegram(bot_token, chat_id, mensaje):
             "parse_mode": "Markdown"
         }
         r = requests.post(url, json=data, timeout=10)
-        return r.status_code == 200
+        if r.status_code == 200:
+            return True
+        else:
+            print(f"  Telegram respondio {r.status_code}: {r.text[:200]}")
+            return False
     except Exception as e:
-        print(f"Error enviando alerta: {e}")
+        print(f"  Error enviando alerta Telegram: {e}")
         return False
 
 
 def formatear_alerta(tareas_por_prioridad):
-    """Formatea el mensaje de alerta."""
-    ahora = datetime.now(MEXICO_TZ)
+    ahora = _ahora_mexico()
     hora_str = ahora.strftime("%H:%M")
 
-    mensaje = f"🔔 *RECORDATORIO DE TAREAS*\n"
-    mensaje += f"📅 {hora_str} hrs\n"
-    mensaje += "─────────────────\n\n"
+    mensaje = f"*RECORDATORIO DE TAREAS*\n"
+    mensaje += f"Hora: {hora_str} hrs\n"
+    mensaje += "-----------------\n\n"
 
     total = 0
 
     if tareas_por_prioridad.get("alta"):
-        mensaje += "🔴 *PRIORIDAD ALTA* (cada 2 hrs)\n"
+        mensaje += "*PRIORIDAD ALTA* (cada 2 hrs)\n"
         for t in tareas_por_prioridad["alta"]:
-            mensaje += f"  • {t['titulo']}\n"
+            mensaje += f"  - {t['titulo']}\n"
             total += 1
         mensaje += "\n"
 
     if tareas_por_prioridad.get("media"):
-        mensaje += "🟡 *PRIORIDAD MEDIA* (cada 4 hrs)\n"
+        mensaje += "*PRIORIDAD MEDIA* (cada 4 hrs)\n"
         for t in tareas_por_prioridad["media"]:
-            mensaje += f"  • {t['titulo']}\n"
+            mensaje += f"  - {t['titulo']}\n"
             total += 1
         mensaje += "\n"
 
     if tareas_por_prioridad.get("baja"):
-        mensaje += "🟢 *PRIORIDAD BAJA*\n"
+        mensaje += "*PRIORIDAD BAJA*\n"
         for t in tareas_por_prioridad["baja"]:
-            mensaje += f"  • {t['titulo']}\n"
+            mensaje += f"  - {t['titulo']}\n"
             total += 1
         mensaje += "\n"
 
-    mensaje += f"─────────────────\n"
-    mensaje += f"📊 Total: *{total} tareas pendientes*\n"
-    mensaje += f"💡 Responde aquí para marcarlas como completadas"
+    mensaje += f"-----------------\n"
+    mensaje += f"Total: *{total} tareas pendientes*\n"
+    mensaje += f"Responde aqui para marcarlas como completadas"
 
     return mensaje
 
 
 def verificar_y_enviar_alertas(bot_token, chat_id):
-    """Verifica si hay que enviar alertas y las envía."""
-    ahora = datetime.now(MEXICO_TZ)
+    ahora = _ahora_mexico()
     alertas = cargar_alertas_enviadas()
     tareas = obtener_tareas_pendientes()
 
@@ -164,14 +163,13 @@ def verificar_y_enviar_alertas(bot_token, chat_id):
     hay_alertas = False
 
     for tarea in tareas:
-        prioridad = tarea.get("prioridad", "media").lower()
+        prioridad = (tarea.get("prioridad") or "media").lower()
         tarea_id = str(tarea.get("id", ""))
-        ultima_alerta = alertas.get(tarea_id, None)
+        ultima_str = alertas.get(tarea_id)
 
         if prioridad == "alta":
-            # Cada 2 horas
-            if ultima_alerta:
-                ultima = datetime.fromisoformat(ultima_alerta)
+            if ultima_str:
+                ultima = _parse_fecha(ultima_str)
                 if (ahora - ultima).total_seconds() < 2 * 3600:
                     continue
             tareas_a_alertar["alta"].append(tarea)
@@ -179,9 +177,8 @@ def verificar_y_enviar_alertas(bot_token, chat_id):
             hay_alertas = True
 
         elif prioridad == "media":
-            # Cada 4 horas
-            if ultima_alerta:
-                ultima = datetime.fromisoformat(ultima_alerta)
+            if ultima_str:
+                ultima = _parse_fecha(ultima_str)
                 if (ahora - ultima).total_seconds() < 4 * 3600:
                     continue
             tareas_a_alertar["media"].append(tarea)
@@ -189,39 +186,39 @@ def verificar_y_enviar_alertas(bot_token, chat_id):
             hay_alertas = True
 
         elif prioridad == "baja":
-            # Solo a las 8 AM
-            if ahora.hour == HORA_ALERTA_BAJA:
-                if ultima_alerta:
-                    ultima = datetime.fromisoformat(ultima_alerta)
-                    # No alertar si ya se alertó hoy
-                    if ultima.date() == ahora.date():
-                        continue
-                tareas_a_alertar["baja"].append(tarea)
-                alertas[tarea_id] = ahora.isoformat()
-                hay_alertas = True
+            hora_ok = (ahora.hour == HORA_ALERTA_BAJA and
+                       ahora.minute < VENTANA_BAJA_MIN)
+            if not hora_ok:
+                continue
+            if ultima_str:
+                ultima = _parse_fecha(ultima_str)
+                if ultima.date() == ahora.date():
+                    continue
+            tareas_a_alertar["baja"].append(tarea)
+            alertas[tarea_id] = ahora.isoformat()
+            hay_alertas = True
 
     if hay_alertas:
         mensaje = formatear_alerta(tareas_a_alertar)
-        enviar_alerta_telegram(bot_token, chat_id, mensaje)
-        guardar_alertas_enviadas(alertas)
+        ok = enviar_alerta_telegram(bot_token, chat_id, mensaje)
+        if ok:
+            guardar_alertas_enviadas(alertas)
+            print(f"  Alertas enviadas: alta={len(tareas_a_alertar['alta'])} media={len(tareas_a_alertar['media'])} baja={len(tareas_a_alertar['baja'])}")
+        else:
+            print("  No se pudieron enviar las alertas")
 
 
 def iniciar_sistema_alertas(bot_token, chat_id):
-    """
-    Inicia el sistema de alertas en un hilo separado.
-    Verifica cada 30 minutos si hay alertas pendientes.
-    """
     def loop_alertas():
-        print("  🔔 Sistema de alertas iniciado")
-        print(f"     Alta: cada 2 hrs | Media: cada 4 hrs | Baja: 8:00 AM")
+        print("  Sistema de alertas iniciado")
+        print("     Alta: cada 2 hrs | Media: cada 4 hrs | Baja: 8:00-8:30 AM")
 
         while True:
             try:
                 verificar_y_enviar_alertas(bot_token, chat_id)
             except Exception as e:
-                print(f"  ⚠️ Error en alertas: {e}")
+                print(f"  Error en loop de alertas: {e}")
 
-            # Verificar cada 30 minutos
             time.sleep(30 * 60)
 
     hilo = threading.Thread(target=loop_alertas, daemon=True)

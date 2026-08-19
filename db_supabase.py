@@ -15,7 +15,7 @@ import requests
 from datetime import datetime
 
 # Configuración de Supabase
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://ovfuahmjvnlpmxsospsx.supabase.co/rest/v1")
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://ovfuahmjvnlpmxsospsx.supabase.co") + "/rest/v1"
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92ZnVhaG1qdm5scG14c29zcHN4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwODk0ODksImV4cCI6MjA5NTY2NTQ4OX0.QiPqZKqwuFNXsIZHMiJ_5QXY1p9ah6KEXP3o135i0Jc")
 
 HEADERS = {
