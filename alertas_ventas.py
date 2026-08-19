@@ -15,8 +15,8 @@ Integracion sugerida (Fase 2, con alias para no confundir modulos):
     revisar_alertas_ventas()
 
 Variables de entorno: TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID.
-(El brief mencionaba TELEGRAM_TOKEN; el .env del proyecto usa
- TELEGRAM_BOT_TOKEN, asi que se respeta el nombre del proyecto.)
+(El brief mencionaba TELEGRAM_TOKEN; todo el proyecto quedo unificado
+ en TELEGRAM_BOT_TOKEN, incluido render.yaml.)
 =============================================================
 """
 
@@ -35,7 +35,7 @@ ESTADO_FILE = "alertas_ventas_enviadas.json"
 VENTANA_MIN = 30          # el bot revisa cada 30 min
 TIMEOUT = 15
 
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("TELEGRAM_TOKEN") or ""
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") or ""
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID") or ""
 
 

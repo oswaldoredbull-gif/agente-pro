@@ -1,17 +1,24 @@
-﻿services:
+services:
   - type: worker
     name: telegram-bot-oswaldo
     runtime: python
     buildCommand: pip install -r requirements.txt
     startCommand: python telegram_bot_memoria.py
     envVars:
-      - key: TELEGRAM_TOKEN
+      # Nombre unico para el token. Antes convivian TELEGRAM_TOKEN y
+      # TELEGRAM_BOT_TOKEN, y el codigo leia el primero, asi que
+      # actualizar el segundo no surtia efecto.
+      - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: TELEGRAM_CHAT_ID
         sync: false
+      # OJO: sin /rest/v1 al final. El codigo lo agrega solo.
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_KEY
         sync: false
       - key: ANTHROPIC_API_KEY
+        sync: false
+      # Prospeccion con Places API (New)
+      - key: GOOGLE_PLACES_KEY
         sync: false

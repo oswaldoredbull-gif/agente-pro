@@ -117,14 +117,34 @@ def _registrar_actividad(tipo, descripcion, prospecto_id=None, cliente_id=None):
 
 
 # =============================================================
-# 1. PROSPECTAR NEGOCIOS (Google Places)
+# 1. PROSPECTAR NEGOCIOS (Places API New)
 # =============================================================
+#
+# Usa Places API (New): POST https://places.googleapis.com/v1/places:searchText
+# La Places API vieja (maps.googleapis.com/.../textsearch/json) ya no se
+# puede habilitar en proyectos de Google Cloud creados despues del
+# 1 de marzo de 2025, por eso este modulo va directo a la nueva.
+# La nueva ademas devuelve telefono y sitio web, que la vieja no daba.
+# =============================================================
+
+PLACES_URL = "https://places.googleapis.com/v1/places:searchText"
+
+PLACES_CAMPOS = ",".join([
+    "places.id",
+    "places.displayName",
+    "places.formattedAddress",
+    "places.rating",
+    "places.userRatingCount",
+    "places.nationalPhoneNumber",
+    "places.websiteUri",
+])
+
 
 def prospectar_negocios(giro, ciudad="Guadalajara", max_resultados=10, guardar=True):
     """Busca negocios en Google Places y opcionalmente los guarda como prospectos."""
     if not GOOGLE_PLACES_KEY:
         return ("Error: falta GOOGLE_PLACES_KEY en el .env. "
-                "Consiguela en console.cloud.google.com (API: Places API).")
+                "Consiguela en console.cloud.google.com habilitando 'Places API (New)'.")
 
     try:
         max_resultados = max(1, min(int(max_resultados), 20))
@@ -133,38 +153,58 @@ def prospectar_negocios(giro, ciudad="Guadalajara", max_resultados=10, guardar=T
 
     consulta = f"{giro} en {ciudad}"
     try:
-        r = requests.get(
-            "https://maps.googleapis.com/maps/api/place/textsearch/json",
-            params={"query": consulta, "key": GOOGLE_PLACES_KEY, "language": "es"},
+        r = requests.post(
+            PLACES_URL,
+            headers={
+                "Content-Type": "application/json",
+                "X-Goog-Api-Key": GOOGLE_PLACES_KEY,
+                "X-Goog-FieldMask": PLACES_CAMPOS,
+            },
+            json={
+                "textQuery": consulta,
+                "languageCode": "es",
+                "regionCode": "MX",
+                "pageSize": max_resultados,
+            },
             timeout=TIMEOUT,
         )
         payload = r.json()
     except Exception as e:
         return f"Error consultando Google Places: {e}"
 
-    estado = payload.get("status")
-    if estado == "ZERO_RESULTS":
-        return f"Sin resultados para '{consulta}'."
-    if estado != "OK":
-        return f"Google Places respondio {estado}: {payload.get('error_message', 'sin detalle')}"
+    if r.status_code != 200:
+        detalle = (payload.get("error", {}) or {}).get("message", r.text[:200])
+        if r.status_code == 403:
+            return (f"Google Places rechazo la llamada (403): {detalle}\n"
+                    "Revisa que 'Places API (New)' este habilitada y que la key "
+                    "no tenga restricciones que bloqueen este uso.")
+        return f"Google Places respondio {r.status_code}: {detalle}"
 
-    lugares = payload.get("results", [])[:max_resultados]
+    lugares = payload.get("places", [])[:max_resultados]
+    if not lugares:
+        return f"Sin resultados para '{consulta}'."
 
     lineas = [f"PROSPECCION: {consulta} ({len(lugares)} resultados)", "-" * 50]
     nuevos = 0
     repetidos = 0
 
     for i, lugar in enumerate(lugares, 1):
-        nombre = lugar.get("name", "Sin nombre")
-        direccion = lugar.get("formatted_address", "")
+        nombre = (lugar.get("displayName") or {}).get("text") or "Sin nombre"
+        direccion = lugar.get("formattedAddress", "")
         rating = lugar.get("rating")
-        resenas = lugar.get("user_ratings_total")
-        place_id = lugar.get("place_id")
+        resenas = lugar.get("userRatingCount")
+        place_id = lugar.get("id")
+        telefono = lugar.get("nationalPhoneNumber", "")
+        sitio = lugar.get("websiteUri", "")
 
         lineas.append(f"{i}. {nombre}")
         lineas.append(f"   {direccion}")
+        if telefono:
+            lineas.append(f"   Tel: {telefono}")
         if rating:
             lineas.append(f"   Rating: {rating} ({resenas} resenas)")
+        if sitio:
+            lineas.append(f"   Web: {sitio}")
 
         if guardar and place_id:
             ok, existente = _sb_get("prospectos", f"select=id&place_id=eq.{place_id}")
@@ -176,12 +216,15 @@ def prospectar_negocios(giro, ciudad="Guadalajara", max_resultados=10, guardar=T
             data = {
                 "nombre": nombre,
                 "direccion": direccion,
+                "telefono": telefono,
                 "ciudad": ciudad,
                 "giro": giro,
                 "fuente": "google_places",
                 "place_id": place_id,
                 "etapa": "nuevo",
             }
+            if sitio:
+                data["notas"] = f"Sitio web: {sitio}"
             if rating is not None:
                 data["rating"] = rating
             if resenas is not None:
