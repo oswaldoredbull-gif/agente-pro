@@ -20,6 +20,7 @@ import sqlite3
 import smtplib
 import csv
 import time
+import base64
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
@@ -28,7 +29,18 @@ from pathlib import Path
 from dotenv import load_dotenv
 from anthropic import Anthropic
 
-load_dotenv()
+load_dotenv(override=True)  # convencion del proyecto: el .env manda
+
+# --- Modulo de ventas DSS (Fase 2) ---
+from tools_ventas import TOOLS_VENTAS, FUNCIONES_VENTAS
+from cotizador_pdf import TOOL_COTIZADOR_PDF, cotizar_pdf
+from licencias import TOOLS_LICENCIAS, FUNCIONES_LICENCIAS
+
+# --- Memoria persistente (para igualar las 25 tools del bot) ---
+from memoria import (
+    HERRAMIENTAS_MEMORIA, FUNCIONES_MEMORIA,
+    obtener_system_prompt_con_memoria,
+)
 
 
 # =============================================================
@@ -493,7 +505,7 @@ HERRAMIENTAS = [
     {"name":"generar_grafica","description":"Genera gráficas desde CSV/Excel. Tipos: barras, lineas, pastel, barras_horizontales, dispersión.","input_schema":{"type":"object","properties":{"ruta_csv":{"type":"string"},"tipo_grafica":{"type":"string","default":"barras"},"columna_x":{"type":"string","default":""},"columna_y":{"type":"string","default":""},"titulo":{"type":"string","default":"Gráfica"},"nombre_archivo":{"type":"string","default":"grafica.png"}},"required":["ruta_csv"]}},
     {"name":"resumir_texto","description":"Resume textos largos. Tipos: corto, medio, largo, puntos.","input_schema":{"type":"object","properties":{"texto":{"type":"string"},"longitud":{"type":"string","default":"medio"},"idioma":{"type":"string","default":"español"}},"required":["texto"]}},
     {"name":"obtener_clima","description":"Clima actual de una ciudad.","input_schema":{"type":"object","properties":{"ciudad":{"type":"string"},"pais":{"type":"string","default":"MX"}},"required":["ciudad"]}},
-]
+] + HERRAMIENTAS_MEMORIA + TOOLS_VENTAS + [TOOL_COTIZADOR_PDF] + TOOLS_LICENCIAS  # memoria + ventas DSS
 
 FUNCIONES = {
     "buscar_en_web": lambda a: buscar_en_web(a["consulta"], a.get("max_resultados",5)),
@@ -506,15 +518,78 @@ FUNCIONES = {
     "generar_grafica": lambda a: generar_grafica(a["ruta_csv"], a.get("tipo_grafica","barras"), a.get("columna_x",""), a.get("columna_y",""), a.get("titulo","Gráfica"), a.get("nombre_archivo","grafica.png")),
     "resumir_texto": lambda a: resumir_texto(a["texto"], a.get("longitud","medio"), a.get("idioma","español")),
     "obtener_clima": lambda a: obtener_clima(a["ciudad"], a.get("pais","MX")),
+    **FUNCIONES_MEMORIA,  # memoria persistente
+    # --- Modulo de ventas DSS (Fase 2) ---
+    **FUNCIONES_VENTAS,
+    **FUNCIONES_LICENCIAS,
+    "cotizar_pdf": cotizar_pdf,
 }
 
 SYSTEM_PROMPT = """
 Eres un asistente personal inteligente que habla español. Tu nombre es "Agente Pro".
-Tienes 10 herramientas: buscar_en_web, enviar_correo, leer_pdf, leer_excel_csv,
+Tienes 25 herramientas.
+GENERALES: buscar_en_web, enviar_correo, leer_pdf, leer_excel_csv,
 consultar_base_datos, guardar_archivo, traducir_texto, generar_grafica, resumir_texto, obtener_clima.
+NEGOCIO DSS (toners y licencias): prospectar_negocios, registrar_prospecto, listar_prospectos,
+actualizar_prospecto, registrar_cliente, cotizar_texto, cotizar_pdf, metricas_ventas,
+listar_paquetes_licencias, cotizar_licencias, registrar_licencia, renovaciones_proximas.
+MEMORIA: recordar_hecho, olvidar_hecho, listar_memoria.
+En ventas DSS los precios son SIN IVA; nunca inventes precios ni margenes.
+Cuando el usuario comparta info personal importante, usa recordar_hecho.
 Reglas: Responde en español, usa herramientas cuando necesites datos reales, no inventes,
 confirma antes de enviar correos, combina herramientas para tareas complejas.
 """
+
+
+# =============================================================
+# CARGA DE ARCHIVOS (PDF, Excel/CSV, imágenes) DESDE EL CHAT
+# =============================================================
+
+UPLOADS_DIR = Path("archivos_subidos")
+UPLOADS_DIR.mkdir(exist_ok=True)
+
+EXTENSIONES_IMAGEN = {
+    ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+    ".webp": "image/webp", ".gif": "image/gif",
+}
+
+def guardar_archivo_subido(archivo):
+    """Guarda en disco un archivo recibido por st.chat_input y regresa su ruta."""
+    ruta = UPLOADS_DIR / archivo.name
+    with open(ruta, "wb") as f:
+        f.write(archivo.getvalue())
+    return ruta
+
+def construir_contenido_mensaje(texto, archivos):
+    """
+    Combina el texto escrito por el usuario con los archivos adjuntos en el
+    formato de contenido que espera la API de Claude:
+      - Imágenes (.png/.jpg/.jpeg/.webp/.gif) -> bloque de imagen en base64
+        (Claude las analiza directamente con visión, sin pasar por una tool).
+      - PDF/Excel/CSV -> se guardan en disco y se le indica a Claude la ruta,
+        para que use sus tools leer_pdf / leer_excel_csv sobre ese archivo.
+    """
+    notas_texto = texto or ""
+    bloques_imagen = []
+    for archivo in archivos:
+        ruta = guardar_archivo_subido(archivo)
+        ext = ruta.suffix.lower()
+        if ext in EXTENSIONES_IMAGEN:
+            datos_b64 = base64.b64encode(archivo.getvalue()).decode("utf-8")
+            bloques_imagen.append({
+                "type": "image",
+                "source": {"type": "base64", "media_type": EXTENSIONES_IMAGEN[ext], "data": datos_b64},
+            })
+            notas_texto += f"\n\n[Imagen adjunta: {archivo.name}]"
+        else:
+            notas_texto += (
+                f"\n\n[Archivo adjunto disponible en: {ruta}. "
+                f"Usa leer_pdf o leer_excel_csv con esa ruta para trabajarlo.]"
+            )
+
+    contenido = [{"type": "text", "text": notas_texto.strip() or "Analiza el archivo adjunto."}]
+    contenido.extend(bloques_imagen)
+    return contenido
 
 
 # =============================================================
@@ -534,34 +609,64 @@ if "tools_used" not in st.session_state:
 # Sidebar
 with st.sidebar:
     st.markdown('<div class="sidebar-title">🤖 Agente Pro</div>', unsafe_allow_html=True)
-    st.markdown('<div class="sidebar-subtitle">Ultimate Edition — 10 herramientas</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="sidebar-subtitle">Ultimate Edition — {len(HERRAMIENTAS)} herramientas</div>', unsafe_allow_html=True)
 
     st.markdown("---")
 
-    tools_info = [
-        ("🔍", "Búsqueda web", True),
-        ("📧", "Enviar correos", bool(os.getenv("EMAIL_ADDRESS"))),
-        ("📄", "Leer PDFs", True),
-        ("📊", "Leer Excel/CSV", True),
-        ("🗄️", "Base de datos", True),
-        ("💾", "Guardar archivos", True),
-        ("🌐", "Traductor", True),
-        ("📈", "Gráficas", True),
-        ("📝", "Resumidor", True),
-        ("🌤️", "Clima real", bool(os.getenv("OPENWEATHER_API_KEY"))),
+    _supabase_ok = bool(os.getenv("SUPABASE_URL") and os.getenv("SUPABASE_KEY"))
+
+    grupos = [
+        ("GENERALES", [
+            ("🔍", "Búsqueda web", True),
+            ("📧", "Enviar correos", bool(os.getenv("EMAIL_ADDRESS"))),
+            ("📄", "Leer PDFs", True),
+            ("📊", "Leer Excel/CSV", True),
+            ("🗄️", "Base de datos", True),
+            ("💾", "Guardar archivos", True),
+            ("🌐", "Traductor", True),
+            ("📈", "Gráficas", True),
+            ("📝", "Resumidor", True),
+            ("🌤️", "Clima real", bool(os.getenv("OPENWEATHER_API_KEY"))),
+        ]),
+        ("VENTAS DSS", [
+            ("🎯", "Prospección Google", bool(os.getenv("GOOGLE_PLACES_KEY"))),
+            ("➕", "Alta de prospecto", _supabase_ok),
+            ("📋", "Ver prospectos", _supabase_ok),
+            ("🔄", "Mover de etapa", _supabase_ok),
+            ("🤝", "Alta de cliente", _supabase_ok),
+            ("🧾", "Cotizar en texto", _supabase_ok),
+            ("📑", "Cotizar en PDF", _supabase_ok),
+            ("📊", "Métricas y embudo", _supabase_ok),
+            ("💿", "Catálogo licencias", True),
+            ("💼", "Cotizar licencias", _supabase_ok),
+            ("🔑", "Alta de licencia", _supabase_ok),
+            ("⏰", "Renovaciones", _supabase_ok),
+        ]),
+        ("MEMORIA", [
+            ("🧠", "Recordar dato", True),
+            ("🗑️", "Olvidar dato", True),
+            ("📖", "Ver memoria", True),
+        ]),
     ]
 
-    for icon, name, active in tools_info:
-        status = "● Activo" if active else "○ Config"
-        status_class = "status-on" if active else "status-off"
+    for titulo, tools_info in grupos:
+        activos = sum(1 for _, _, a in tools_info if a)
         st.markdown(
-            f'<div class="tool-card">'
-            f'<span class="tool-icon">{icon}</span>'
-            f'<span class="tool-name">{name}</span>'
-            f'<span class="tool-status {status_class}">{status}</span>'
-            f'</div>',
+            f'<div style="font-size:11px; font-weight:700; letter-spacing:.5px; '
+            f'color:#6C4AB6; margin:10px 0 6px;">{titulo} · {activos}/{len(tools_info)}</div>',
             unsafe_allow_html=True
         )
+        for icon, name, active in tools_info:
+            status = "● Activo" if active else "○ Config"
+            status_class = "status-on" if active else "status-off"
+            st.markdown(
+                f'<div class="tool-card">'
+                f'<span class="tool-icon">{icon}</span>'
+                f'<span class="tool-name">{name}</span>'
+                f'<span class="tool-status {status_class}">{status}</span>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
 
     st.markdown("---")
 
@@ -585,7 +690,7 @@ st.markdown(
     '<div class="header-container">'
     '<div class="header-icon">🤖</div>'
     '<div class="header-title">Agente Pro Ultimate</div>'
-    '<div class="header-desc">Tu asistente personal con 10 herramientas inteligentes</div>'
+    f'<div class="header-desc">Tu asistente personal con {len(HERRAMIENTAS)} herramientas inteligentes</div>'
     '</div>',
     unsafe_allow_html=True
 )
@@ -617,6 +722,9 @@ st.markdown("<br>", unsafe_allow_html=True)
 for msg in st.session_state.chat_history:
     if msg["role"] == "user":
         st.markdown(f'<div class="user-msg">{msg["content"]}</div>', unsafe_allow_html=True)
+    elif msg["role"] == "user_image":
+        if Path(msg["content"]).exists():
+            st.image(msg["content"], width=280)
     elif msg["role"] == "assistant":
         st.markdown(f'<div class="agent-msg">{msg["content"]}</div>', unsafe_allow_html=True)
     elif msg["role"] == "tool":
@@ -646,21 +754,49 @@ if not st.session_state.chat_history:
                 st.session_state.quick_action = action.split(" ", 1)[1]
                 st.rerun()
 
-# Input del usuario
-pregunta = st.chat_input("Escribe tu mensaje aquí...")
+# Input del usuario (con carga de archivos: PDF, Excel/CSV e imágenes)
+entrada = st.chat_input(
+    "Escribe tu mensaje aquí...",
+    accept_file="multiple",
+    file_type=["pdf", "xlsx", "xls", "csv", "png", "jpg", "jpeg", "webp"],
+)
+
+pregunta_texto = entrada.text if entrada else None
+archivos_subidos = entrada.files if entrada else []
 
 # Verificar si hay quick action pendiente
 if "quick_action" in st.session_state:
-    pregunta = st.session_state.quick_action
+    pregunta_texto = st.session_state.quick_action
+    archivos_subidos = []
     del st.session_state.quick_action
 
-if pregunta:
+if pregunta_texto or archivos_subidos:
+    # Texto que se muestra en el historial del chat
+    texto_mostrado = pregunta_texto or ""
+    rutas_guardadas = []
+    if archivos_subidos:
+        nombres = ", ".join(a.name for a in archivos_subidos)
+        separador = "\n" if texto_mostrado else ""
+        texto_mostrado += f"{separador}📎 {nombres}"
+
+    # Contenido real enviado a Claude (texto + notas de archivo + imágenes en base64)
+    contenido_mensaje = construir_contenido_mensaje(pregunta_texto, archivos_subidos)
+    # Reconstruir rutas guardadas para mostrar imágenes en el historial (sin volver a guardar)
+    for archivo in archivos_subidos:
+        ruta = UPLOADS_DIR / archivo.name
+        if ruta.suffix.lower() in EXTENSIONES_IMAGEN and ruta.exists():
+            rutas_guardadas.append(str(ruta))
+
     # Agregar mensaje del usuario
-    st.session_state.chat_history.append({"role": "user", "content": pregunta})
-    st.session_state.mensajes.append({"role": "user", "content": pregunta})
+    st.session_state.chat_history.append({"role": "user", "content": texto_mostrado})
+    for ruta_img in rutas_guardadas:
+        st.session_state.chat_history.append({"role": "user_image", "content": ruta_img})
+    st.session_state.mensajes.append({"role": "user", "content": contenido_mensaje})
 
     # Mostrar mensaje del usuario
-    st.markdown(f'<div class="user-msg">{pregunta}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="user-msg">{texto_mostrado}</div>', unsafe_allow_html=True)
+    for ruta_img in rutas_guardadas:
+        st.image(ruta_img, width=280)
 
     # Procesar con Claude
     with st.spinner("🤖 Pensando..."):
@@ -671,7 +807,7 @@ if pregunta:
                 respuesta = client.messages.create(
                     model="claude-sonnet-4-6",
                     max_tokens=2048,
-                    system=SYSTEM_PROMPT,
+                    system=obtener_system_prompt_con_memoria(SYSTEM_PROMPT),
                     tools=HERRAMIENTAS,
                     messages=st.session_state.mensajes,
                 )

@@ -41,7 +41,20 @@ from pathlib import Path
 from dotenv import load_dotenv
 from anthropic import Anthropic
 
-load_dotenv()
+load_dotenv(override=True)  # el .env siempre tiene prioridad sobre variables de sistema viejas
+_k = __import__('os').getenv('ANTHROPIC_API_KEY', '')
+print(f"[agente_pro_ultimate] ANTHROPIC_API_KEY cargada: longitud={len(_k)}, termina en ...{_k[-6:] if len(_k) > 6 else _k}")
+
+# --- Modulo de ventas DSS (Fase 2) ---
+from tools_ventas import TOOLS_VENTAS, FUNCIONES_VENTAS
+from cotizador_pdf import TOOL_COTIZADOR_PDF, cotizar_pdf
+from licencias import TOOLS_LICENCIAS, FUNCIONES_LICENCIAS
+
+# --- Memoria persistente (para igualar las 25 tools del bot) ---
+from memoria import (
+    HERRAMIENTAS_MEMORIA, FUNCIONES_MEMORIA,
+    obtener_system_prompt_con_memoria,
+)
 
 
 # =============================================================
@@ -222,7 +235,7 @@ def leer_excel_csv(ruta_archivo: str, max_filas: int = 20) -> str:
 # 5. 🗄️ BASE DE DATOS SQLite
 # =============================================================
 
-DB_PATH = DB_PATH = r"C:\Users\omurillo\.gemini\antigravity\scratch\claude_agent\agente_datos.db"
+DB_PATH = str(Path(__file__).parent / "agente_datos.db")  # relativo al script, no a la maquina vieja
 
 def inicializar_db():
     conn = sqlite3.connect(DB_PATH)
@@ -719,7 +732,7 @@ HERRAMIENTAS = [
             "required": ["ciudad"]
         }
     }
-]
+] + HERRAMIENTAS_MEMORIA + TOOLS_VENTAS + [TOOL_COTIZADOR_PDF] + TOOLS_LICENCIAS  # memoria + ventas DSS
 
 # Mapeo de funciones
 FUNCIONES_DISPONIBLES = {
@@ -733,6 +746,11 @@ FUNCIONES_DISPONIBLES = {
     "generar_grafica": lambda a: generar_grafica(a["ruta_csv"], a.get("tipo_grafica", "barras"), a.get("columna_x", ""), a.get("columna_y", ""), a.get("titulo", "Gráfica"), a.get("nombre_archivo", "grafica.png")),
     "resumir_texto": lambda a: resumir_texto(a["texto"], a.get("longitud", "medio"), a.get("idioma", "español")),
     "obtener_clima": lambda a: obtener_clima(a["ciudad"], a.get("pais", "MX")),
+    **FUNCIONES_MEMORIA,  # memoria persistente
+    # --- Modulo de ventas DSS (Fase 2) ---
+    **FUNCIONES_VENTAS,
+    **FUNCIONES_LICENCIAS,
+    "cotizar_pdf": cotizar_pdf,
 }
 
 
@@ -759,6 +777,27 @@ cualquier tarea usando las herramientas disponibles.
 9. **resumir_texto** - Resumir textos largos en versiones cortas
 10. **obtener_clima** - Consultar el clima actual de cualquier ciudad
 
+## HERRAMIENTAS DEL NEGOCIO DSS (toners y licencias de software):
+
+11. **prospectar_negocios** - Buscar clientes potenciales en Google Places
+12. **registrar_prospecto** - Alta manual de un prospecto
+13. **listar_prospectos** - Ver el embudo, con filtro por etapa o ciudad
+14. **actualizar_prospecto** - Mover de etapa y registrar el contacto
+15. **registrar_cliente** - Convertir un prospecto en cliente
+16. **cotizar_texto** - Cotización rápida en texto
+17. **cotizar_pdf** - Cotización formal en PDF, lista para enviar
+18. **metricas_ventas** - Embudo y métricas de los últimos 7 días
+19. **listar_paquetes_licencias** - Catálogo de licencias con margen
+20. **cotizar_licencias** - Cotizar licencias y ver el margen
+21. **registrar_licencia** - Registrar una licencia vendida
+22. **renovaciones_proximas** - Licencias por vencer
+
+## HERRAMIENTAS DE MEMORIA:
+
+23. **recordar_hecho** - Guardar datos importantes del usuario
+24. **olvidar_hecho** - Borrar algo de la memoria
+25. **listar_memoria** - Mostrar todo lo recordado
+
 ## REGLAS:
 
 1. Siempre responde en español de forma amigable y profesional
@@ -771,6 +810,12 @@ cualquier tarea usando las herramientas disponibles.
 8. Puedes combinar múltiples herramientas para tareas complejas
 9. Para traducir, detecta automáticamente el idioma si no se especifica
 10. Para gráficas, elige el tipo más adecuado si no se especifica
+11. En ventas DSS los precios son SIN IVA; el IVA se calcula solo
+12. Antes de cotizar licencias, revisa el catálogo con listar_paquetes_licencias
+13. Al cerrar una venta, registra cliente y licencia para no perder la renovación
+14. Nunca inventes precios ni márgenes: sácalos del catálogo o de la base
+15. Cuando el usuario comparta info personal importante, usa recordar_hecho
+16. Nunca digas "según mi memoria": usa la información con naturalidad
 
 ## EJEMPLOS DE TAREAS COMPLEJAS:
 
@@ -784,6 +829,14 @@ cualquier tarea usando las herramientas disponibles.
   → obtener_clima
 - "Resume este texto en puntos clave y guárdalo"
   → resumir_texto + guardar_archivo
+- "Busca despachos contables en Zapopan y guárdalos como prospectos"
+  → prospectar_negocios
+- "Cotiza 10 licencias de Microsoft 365 Standard en PDF para el cliente 3"
+  → cotizar_licencias
+- "¿Cómo va el embudo esta semana?"
+  → metricas_ventas
+- "¿Qué licencias se me vencen en los próximos 30 días?"
+  → renovaciones_proximas
 """
 
 
@@ -840,7 +893,7 @@ def agente_completo():
                 respuesta = client.messages.create(
                     model="claude-sonnet-4-6",
                     max_tokens=2048,
-                    system=SYSTEM_PROMPT,
+                    system=obtener_system_prompt_con_memoria(SYSTEM_PROMPT),
                     tools=HERRAMIENTAS,
                     messages=mensajes,
                 )

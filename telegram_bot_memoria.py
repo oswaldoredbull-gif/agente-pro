@@ -1,4 +1,4 @@
-﻿"""
+"""
 =============================================================
 🤖 AGENTE PRO - Bot de Telegram con Memoria
 =============================================================
@@ -59,12 +59,29 @@ from memoria import (
 )
 from alertas import iniciar_sistema_alertas
 
+# --- Modulo de ventas DSS (Fase 2) ---
+from tools_ventas import TOOLS_VENTAS, FUNCIONES_VENTAS
+from cotizador_pdf import TOOL_COTIZADOR_PDF, cotizar_pdf
+from licencias import TOOLS_LICENCIAS, FUNCIONES_LICENCIAS
+# Alias: 'revisar_alertas' es un nombre generico, se importa renombrado
+from alertas_ventas import (
+    revisar_alertas as revisar_alertas_ventas,
+    iniciar_sistema_alertas_ventas,
+)
+
 # Configurar logging
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+# Silenciar los logs HTTP: httpx imprime la URL completa de cada llamada
+# a la API de Telegram, y el token va DENTRO de esa URL. Con WARNING
+# dejan de aparecer los INFO y el token ya no se filtra en consola.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("telegram.ext.Application").setLevel(logging.WARNING)
 
 
 # =============================================================
@@ -162,11 +179,7 @@ def leer_excel_csv(ruta_archivo, max_filas=20):
         return f"Error: {str(e)}"
 
 
-import platform
-if platform.system() == "Windows":
-    DB_PATH = r"C:\Users\omurillo\.gemini\antigravity\scratch\claude_agent\agente_datos.db"
-else:
-    DB_PATH = "agente_datos.db"
+DB_PATH = str(Path(__file__).parent / "agente_datos.db")  # relativo al script, no a la maquina vieja
 
 def inicializar_db():
     conn = sqlite3.connect(DB_PATH); c = conn.cursor()
@@ -334,7 +347,7 @@ HERRAMIENTAS = [
     {"name":"generar_grafica","description":"Gráficas desde CSV/Excel: barras, lineas, pastel.","input_schema":{"type":"object","properties":{"ruta_csv":{"type":"string"},"tipo_grafica":{"type":"string","default":"barras"},"columna_x":{"type":"string","default":""},"columna_y":{"type":"string","default":""},"titulo":{"type":"string","default":"Gráfica"},"nombre_archivo":{"type":"string","default":"grafica.png"}},"required":["ruta_csv"]}},
     {"name":"resumir_texto","description":"Resume textos largos (corto, medio, largo, puntos).","input_schema":{"type":"object","properties":{"texto":{"type":"string"},"longitud":{"type":"string","default":"medio"},"idioma":{"type":"string","default":"español"}},"required":["texto"]}},
     {"name":"obtener_clima","description":"Clima actual de una ciudad.","input_schema":{"type":"object","properties":{"ciudad":{"type":"string"},"pais":{"type":"string","default":"MX"}},"required":["ciudad"]}},
-] + HERRAMIENTAS_MEMORIA  # Agregar herramientas de memoria
+] + HERRAMIENTAS_MEMORIA + TOOLS_VENTAS + [TOOL_COTIZADOR_PDF] + TOOLS_LICENCIAS  # memoria + ventas DSS
 
 FUNCIONES = {
     "buscar_en_web": lambda a: buscar_en_web(a["consulta"], a.get("max_resultados",5)),
@@ -348,15 +361,24 @@ FUNCIONES = {
     "resumir_texto": lambda a: resumir_texto(a["texto"], a.get("longitud","medio"), a.get("idioma","español")),
     "obtener_clima": lambda a: obtener_clima(a["ciudad"], a.get("pais","MX")),
     **FUNCIONES_MEMORIA,  # Agregar funciones de memoria
+    # --- Modulo de ventas DSS (Fase 2) ---
+    **FUNCIONES_VENTAS,
+    **FUNCIONES_LICENCIAS,
+    "cotizar_pdf": cotizar_pdf,
 }
 
 SYSTEM_PROMPT = """
 Eres un asistente personal inteligente en Telegram. Tu nombre es "Agente Pro".
-Hablas español de forma amigable. Tienes 13 herramientas disponibles.
+Hablas español de forma amigable. Tienes 25 herramientas disponibles.
 
 HERRAMIENTAS PRINCIPALES:
 buscar_en_web, enviar_correo, leer_pdf, leer_excel_csv, consultar_base_datos,
 guardar_archivo, traducir_texto, generar_grafica, resumir_texto, obtener_clima.
+
+HERRAMIENTAS DEL NEGOCIO DSS (toners y licencias de software):
+prospectar_negocios, registrar_prospecto, listar_prospectos, actualizar_prospecto,
+registrar_cliente, cotizar_texto, cotizar_pdf, metricas_ventas,
+listar_paquetes_licencias, cotizar_licencias, registrar_licencia, renovaciones_proximas.
 
 HERRAMIENTAS DE MEMORIA:
 - recordar_hecho: Guarda datos importantes del usuario (nombre, preferencias, etc.)
@@ -666,6 +688,8 @@ def main():
     if chat_id:
         iniciar_sistema_alertas(token, chat_id)
         print("  Sistema de alertas iniciado")
+        # Alertas de ventas DSS: hilo hermano, misma cadencia de 30 min
+        iniciar_sistema_alertas_ventas(token, chat_id)
     # Crear carpeta para archivos de Telegram
     Path("telegram_files").mkdir(exist_ok=True)
 

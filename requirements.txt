@@ -1,4 +1,4 @@
-﻿anthropic
+anthropic
 duckduckgo-search
 PyPDF2
 openpyxl
@@ -8,3 +8,5 @@ python-telegram-bot
 matplotlib
 supabase
 httpx
+reportlab
+streamlit
