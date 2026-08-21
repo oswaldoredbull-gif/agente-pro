@@ -59,7 +59,7 @@ PERIODICIDAD_POR_CATEGORIA = {
     "sistemas operativos": "perpetua",
 }
 
-_cache = {"datos": None, "hora": None}
+_cache = {"datos": None, "hora": None, "meta": None}
 CACHE_MIN = 10
 
 
@@ -125,8 +125,12 @@ def consultar_catalogo(buscar="", categoria="", limite=50, usar_cache=True):
         return False, f"Error del catalogo: {payload.get('error', 'sin detalle')}"
 
     productos = payload.get("productos", [])
-    _cache["datos"] = {"clave": clave, "productos": productos}
+    _cache["datos"] = {"clave": clave, "productos": productos,
+                       "total_catalogo": payload.get("total_catalogo"),
+                       "relajada": payload.get("busqueda_relajada", False)}
     _cache["hora"] = _ahora()
+    _cache["meta"] = {"total_catalogo": payload.get("total_catalogo"),
+                      "relajada": payload.get("busqueda_relajada", False)}
     return True, productos
 
 
@@ -172,7 +176,7 @@ def calcular_margen(costo, precio, puestos=1):
 # 1. LISTAR / BUSCAR EN EL CATALOGO
 # =============================================================
 
-def listar_paquetes_licencias(software="", puestos=1, categoria="", limite=15):
+def listar_paquetes_licencias(software="", puestos=1, categoria="", limite=25):
     """Busca en el catalogo real de licencias y muestra precio y margen."""
     try:
         puestos = max(1, int(puestos))
@@ -186,13 +190,31 @@ def listar_paquetes_licencias(software="", puestos=1, categoria="", limite=15):
     ok, datos = consultar_catalogo(buscar=software, categoria=categoria, limite=limite)
     if not ok:
         return f"No se pudo leer el catalogo. {datos}"
+
+    meta = _cache.get("meta") or {}
+    total_cat = meta.get("total_catalogo")
+
     if not datos:
         filtro = software or categoria or "todo"
-        return f"Sin licencias que coincidan con '{filtro}'."
+        return (
+            f"La busqueda de '{filtro}' no devolvio resultados.\n\n"
+            f"OJO: esto NO significa que DSS no venda ese producto. El catalogo "
+            f"tiene {total_cat if total_cat else 'mas de 100'} licencias activas y se "
+            f"sincroniza con CT Internacional.\n"
+            f"Antes de decirle al usuario que no lo manejamos:\n"
+            f"  1. Reintenta con menos palabras o solo la marca (ej: 'kaspersky' en vez de "
+            f"'kaspersky endpoint security business').\n"
+            f"  2. O lista la categoria completa: Seguridad, Productividad, "
+            f"Facturacion Electronica, Punto de Venta, Sistemas Operativos.\n"
+            f"Si aun asi no aparece, di que no lo encontraste en el catalogo, no que no se vende."
+        )
 
-    lineas = [f"CATALOGO DE LICENCIAS DSS ({len(datos)} resultados"
-              + (f", para {puestos} puesto(s)" if puestos > 1 else "") + ", precios sin IVA)",
-              "=" * 74]
+    encabezado = (f"CATALOGO DE LICENCIAS DSS ({len(datos)} de "
+                  f"{total_cat if total_cat else '?'} licencias activas"
+                  + (f", para {puestos} puesto(s)" if puestos > 1 else "") + ", precios sin IVA)")
+    lineas = [encabezado, "=" * 74]
+    if meta.get("relajada"):
+        lineas.append("(No hubo coincidencia exacta; se busco solo por la primera palabra)")
 
     for p in datos:
         m = calcular_margen(p.get("costo", 0), p.get("precio", 0), puestos)
@@ -427,7 +449,7 @@ TOOLS_LICENCIAS = [
                 "software": {"type": "string", "description": "Texto a buscar en nombre, marca o SKU (ej: Microsoft 365, Kaspersky)", "default": ""},
                 "categoria": {"type": "string", "description": "Categoria: Seguridad, Productividad, Facturacion Electronica, Punto de Venta, Sistemas Operativos", "default": ""},
                 "puestos": {"type": "integer", "description": "Numero de puestos o equipos para calcular el total", "default": 1},
-                "limite": {"type": "integer", "description": "Maximo de resultados (1-50)", "default": 15}
+                "limite": {"type": "integer", "description": "Maximo de resultados (1-50)", "default": 25}
             },
             "required": []
         }
@@ -503,7 +525,7 @@ TOOLS_LICENCIAS = [
 FUNCIONES_LICENCIAS = {
     "listar_paquetes_licencias": lambda a: listar_paquetes_licencias(
         a.get("software", ""), a.get("puestos", 1),
-        a.get("categoria", ""), a.get("limite", 15)),
+        a.get("categoria", ""), a.get("limite", 25)),
     "cotizar_licencias": lambda a: cotizar_licencias(
         a["paquetes"], a.get("cliente_id"), a.get("prospecto_id"),
         a.get("generar_pdf", True), a.get("vigencia_dias", 15), a.get("notas", "")),
