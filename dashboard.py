@@ -1,4 +1,4 @@
-﻿"""
+"""
 =============================================================
 🏠 DASHBOARD PERSONAL - Tu centro de comando diario
 =============================================================
@@ -20,6 +20,8 @@ EJECUCIÓN:
 import streamlit as st
 import os
 import time
+import csv
+import base64
 import requests
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -27,7 +29,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from anthropic import Anthropic
 
-load_dotenv()
+load_dotenv(override=True)  # el .env siempre tiene prioridad sobre variables de sistema viejas
 
 # Cargar secrets de Streamlit Cloud si existen
 try:
@@ -41,6 +43,9 @@ try:
         os.environ["SUPABASE_KEY"] = st.secrets["SUPABASE_KEY"]
 except Exception:
     pass
+
+_k = os.getenv("ANTHROPIC_API_KEY", "")
+print(f"[dashboard.py] ANTHROPIC_API_KEY cargada: longitud={len(_k)}, termina en ...{_k[-6:] if len(_k) > 6 else _k}")
 
 st.set_page_config(
     page_title="Mi Dashboard",
@@ -231,16 +236,35 @@ st.markdown("""
         margin-left: auto;
     }
     .chat-msg-agent {
-        background: rgba(255,255,255,0.06);
-        color: #e2e8f0;
-        padding: 10px 16px;
+        /* Antes era estilo de tema oscuro (texto #e2e8f0 sobre fondo casi
+           transparente); sobre el fondo claro del dashboard quedaba ilegible. */
+        background: #ffffff;
+        color: #1e293b;
+        padding: 12px 16px;
         border-radius: 14px 14px 14px 4px;
         margin: 6px 0;
-        font-size: 13px;
+        font-size: 13.5px;
         max-width: 90%;
-        border: 1px solid rgba(255,255,255,0.06);
-        line-height: 1.6;
+        border: 1px solid #ddd6fe;
+        box-shadow: 0 1px 3px rgba(76,29,149,0.06);
+        line-height: 1.65;
     }
+    /* El contenido del mensaje trae markdown: que herede el color oscuro
+       en vez de tomar el del tema de Streamlit. */
+    .chat-msg-agent p,
+    .chat-msg-agent li,
+    .chat-msg-agent span,
+    .chat-msg-agent strong,
+    .chat-msg-agent em { color: #1e293b !important; }
+    .chat-msg-agent strong { color: #4c1d95 !important; font-weight: 600; }
+    .chat-msg-agent code {
+        background: #f1f5f9;
+        color: #4c1d95 !important;
+        padding: 1px 5px;
+        border-radius: 4px;
+        font-size: 12.5px;
+    }
+    .chat-msg-agent ul { margin: 6px 0 6px 18px; padding-left: 0; }
 
     .stat-mini {
         text-align: center;
@@ -283,6 +307,12 @@ st.markdown("""
 
 from db_supabase import get_tareas, get_contactos, add_tarea, complete_tarea, add_contacto, consultar_sql
 
+# --- Modulo de ventas DSS ---
+from tools_ventas import TOOLS_VENTAS, FUNCIONES_VENTAS
+from cotizador_pdf import TOOL_COTIZADOR_PDF, cotizar_pdf
+from licencias import TOOLS_LICENCIAS, FUNCIONES_LICENCIAS
+from memoria import HERRAMIENTAS_MEMORIA, FUNCIONES_MEMORIA, obtener_system_prompt_con_memoria
+
 
 # =============================================================
 # FUNCIONES DE DATOS
@@ -324,12 +354,135 @@ def get_noticias(tema="tecnología inteligencia artificial México"):
 
 
 # =============================================================
+# CARGA DE ARCHIVOS (PDF, Excel/CSV, imágenes) DESDE EL CHAT RÁPIDO
+# =============================================================
+
+UPLOADS_DIR = Path("archivos_subidos")
+UPLOADS_DIR.mkdir(exist_ok=True)
+
+EXTENSIONES_IMAGEN = {
+    ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+    ".webp": "image/webp", ".gif": "image/gif",
+}
+
+def guardar_archivo_subido(archivo):
+    """Guarda en disco un archivo recibido por st.chat_input y regresa su ruta."""
+    ruta = UPLOADS_DIR / archivo.name
+    with open(ruta, "wb") as f:
+        f.write(archivo.getvalue())
+    return ruta
+
+def extraer_texto_pdf(ruta):
+    try:
+        from PyPDF2 import PdfReader
+    except ImportError:
+        return "Error: Instala PyPDF2 con: pip install PyPDF2"
+    try:
+        reader = PdfReader(str(ruta))
+        texto = ""
+        for i, p in enumerate(reader.pages, 1):
+            t = p.extract_text()
+            if t:
+                texto += f"\n--- Página {i} ---\n{t}"
+        if not texto.strip():
+            return "El PDF no contiene texto extraíble (puede ser escaneado)."
+        if len(texto) > 4000:
+            texto = texto[:4000] + "\n\n[... texto truncado ...]"
+        return texto
+    except Exception as e:
+        return f"Error al leer PDF: {str(e)}"
+
+def extraer_texto_excel_csv(ruta, max_filas=20):
+    try:
+        ext = ruta.suffix.lower()
+        if ext == ".csv":
+            filas = []
+            with open(ruta, "r", encoding="utf-8-sig") as f:
+                for i, fila in enumerate(csv.reader(f)):
+                    if i >= max_filas + 1:
+                        break
+                    filas.append(fila)
+        elif ext in [".xlsx", ".xls"]:
+            from openpyxl import load_workbook
+            wb = load_workbook(str(ruta), read_only=True)
+            ws = wb.active
+            filas = [[str(c) if c else "" for c in r] for i, r in enumerate(ws.iter_rows(values_only=True)) if i < max_filas + 1]
+            wb.close()
+        else:
+            return f"Formato no soportado: {ext}"
+        if not filas:
+            return "El archivo está vacío."
+        encabezados, datos = filas[0], filas[1:]
+        res = f"Columnas: {', '.join(encabezados)}\n\n"
+        res += " | ".join(encabezados) + "\n" + "-" * 40 + "\n"
+        for f in datos:
+            res += " | ".join(f) + "\n"
+        return res
+    except Exception as e:
+        return f"Error al leer archivo: {str(e)}"
+
+def construir_contenido_mensaje(texto, archivos):
+    """
+    Combina el texto del usuario con los archivos adjuntos en el formato
+    de contenido de Claude:
+      - Imágenes -> bloque de imagen en base64 (Claude las analiza con visión).
+      - PDF/Excel/CSV -> se extrae el texto/tabla y se agrega directo al mensaje
+        (este chat no tiene tools de archivos registradas, así que se inyecta
+        el contenido ya leído en vez de pedirle a Claude que llame una tool).
+    """
+    notas_texto = texto or ""
+    bloques_imagen = []
+    for archivo in archivos:
+        ruta = guardar_archivo_subido(archivo)
+        ext = ruta.suffix.lower()
+        if ext in EXTENSIONES_IMAGEN:
+            datos_b64 = base64.b64encode(archivo.getvalue()).decode("utf-8")
+            bloques_imagen.append({
+                "type": "image",
+                "source": {"type": "base64", "media_type": EXTENSIONES_IMAGEN[ext], "data": datos_b64},
+            })
+            notas_texto += f"\n\n[Imagen adjunta: {archivo.name}]"
+        elif ext == ".pdf":
+            contenido = extraer_texto_pdf(ruta)
+            notas_texto += f"\n\n[Contenido del PDF '{archivo.name}']:\n{contenido}"
+        elif ext in [".xlsx", ".xls", ".csv"]:
+            contenido = extraer_texto_excel_csv(ruta)
+            notas_texto += f"\n\n[Contenido de '{archivo.name}']:\n{contenido}"
+
+    contenido_final = [{"type": "text", "text": notas_texto.strip() or "Analiza el archivo adjunto."}]
+    contenido_final.extend(bloques_imagen)
+    return contenido_final
+
+
+# =============================================================
 # CHAT CON AGENTE
 # =============================================================
 
 HERRAMIENTAS_CHAT = [
     {"name":"consultar_base_datos","description":"SQL en tablas: contactos y tareas.","input_schema":{"type":"object","properties":{"consulta_sql":{"type":"string"}},"required":["consulta_sql"]}},
-]
+] + HERRAMIENTAS_MEMORIA + TOOLS_VENTAS + [TOOL_COTIZADOR_PDF] + TOOLS_LICENCIAS  # memoria + ventas DSS
+
+FUNCIONES_CHAT = {
+    "consultar_base_datos": lambda a: consultar_sql(a["consulta_sql"]),
+    **FUNCIONES_MEMORIA,
+    **FUNCIONES_VENTAS,
+    **FUNCIONES_LICENCIAS,
+    "cotizar_pdf": cotizar_pdf,
+}
+
+SYSTEM_CHAT = """Eres el asistente del tablero personal de Oswaldo. Hablas espanol y respondes corto.
+
+Tienes acceso a:
+- La base de tareas y contactos, via consultar_base_datos
+  (contactos: id,nombre,email,telefono,notas | tareas: id,titulo,descripcion,estado,prioridad)
+- El CRM y el catalogo de DSS: prospectos, clientes, cotizaciones, toners y licencias
+- Tu memoria: recordar_hecho, olvidar_hecho, listar_memoria
+
+REGLA DE PRECIOS: nunca inventes ni pidas precios. Los toners salen de buscar_productos
+y las licencias de listar_paquetes_licencias; en la cotizacion pasa solo el SKU.
+Si una busqueda no encuentra algo, reintenta con menos palabras antes de decir que no se vende.
+
+Si te preguntan por el embudo o las ventas, usa metricas_ventas, no consultar_base_datos."""
 
 def chat_agente(mensaje):
     try:
@@ -340,21 +493,27 @@ def chat_agente(mensaje):
         if len(st.session_state.chat_msgs) > 20:
             st.session_state.chat_msgs = st.session_state.chat_msgs[-20:]
 
-        def exec_sql(sql):
-            return consultar_sql(sql)
+        def ejecutar(nombre, argumentos):
+            fn = FUNCIONES_CHAT.get(nombre)
+            if fn is None:
+                return f"Herramienta desconocida: {nombre}"
+            try:
+                return str(fn(argumentos))
+            except Exception as e:
+                return f"Error en {nombre}: {e}"
 
         msgs = list(st.session_state.chat_msgs)
         while True:
             resp = client.messages.create(
-                model="claude-sonnet-4-6", max_tokens=800,
-                system="Eres un asistente rápido en español. Tienes acceso a la base de datos con tablas: contactos (id,nombre,email,telefono,notas) y tareas (id,titulo,descripcion,estado,prioridad). Respuestas cortas y útiles.",
+                model="claude-sonnet-4-6", max_tokens=2000,
+                system=obtener_system_prompt_con_memoria(SYSTEM_CHAT),
                 tools=HERRAMIENTAS_CHAT, messages=msgs)
             if resp.stop_reason == "tool_use":
                 msgs.append({"role": "assistant", "content": resp.content})
                 results = []
                 for b in resp.content:
                     if b.type == "tool_use":
-                        r = exec_sql(b.input["consulta_sql"])
+                        r = ejecutar(b.name, b.input)
                         results.append({"type": "tool_result", "tool_use_id": b.id, "content": r})
                 msgs.append({"role": "user", "content": results})
             else:
@@ -536,14 +695,41 @@ with col_right:
     for msg in st.session_state.chat_history_dash[-6:]:
         if msg["role"] == "user":
             st.markdown(f'<div class="chat-msg-user">{msg["content"]}</div>', unsafe_allow_html=True)
+        elif msg["role"] == "user_image":
+            if Path(msg["content"]).exists():
+                st.image(msg["content"], width=220)
         else:
             st.markdown(f'<div class="chat-msg-agent">{msg["content"]}</div>', unsafe_allow_html=True)
 
-    chat_input = st.chat_input("Pregúntale algo al agente...", key="dash_chat")
-    if chat_input:
-        st.session_state.chat_history_dash.append({"role": "user", "content": chat_input})
+    chat_entrada = st.chat_input(
+        "Pregúntale algo al agente...",
+        key="dash_chat",
+        accept_file="multiple",
+        file_type=["pdf", "xlsx", "xls", "csv", "png", "jpg", "jpeg", "webp"],
+    )
+    if chat_entrada:
+        texto_usuario = chat_entrada.text or ""
+        archivos_usuario = chat_entrada.files
+
+        texto_mostrado = texto_usuario
+        rutas_img = []
+        if archivos_usuario:
+            nombres = ", ".join(a.name for a in archivos_usuario)
+            separador = "\n" if texto_mostrado else ""
+            texto_mostrado += f"{separador}📎 {nombres}"
+
+        contenido_mensaje = construir_contenido_mensaje(texto_usuario, archivos_usuario)
+        for archivo in archivos_usuario:
+            ruta_archivo = UPLOADS_DIR / archivo.name
+            if ruta_archivo.suffix.lower() in EXTENSIONES_IMAGEN and ruta_archivo.exists():
+                rutas_img.append(str(ruta_archivo))
+
+        st.session_state.chat_history_dash.append({"role": "user", "content": texto_mostrado})
+        for ruta_img in rutas_img:
+            st.session_state.chat_history_dash.append({"role": "user_image", "content": ruta_img})
+
         with st.spinner("🤖"):
-            resp = chat_agente(chat_input)
+            resp = chat_agente(contenido_mensaje)
         st.session_state.chat_history_dash.append({"role": "assistant", "content": resp})
         st.rerun()
 

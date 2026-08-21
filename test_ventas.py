@@ -155,15 +155,27 @@ if ok and datos:
     check("total correcto (1856)", abs(tot - 1856) < 0.01, f"total={tot}")
 
 # -------------------------------------------------------------
-paso(7, "listar_paquetes_licencias")
+paso(7, "listar_paquetes_licencias (catalogo real de CT)")
 salida = lic.listar_paquetes_licencias("microsoft", puestos=5)
-check("catalogo con margen", "Margen" in salida and "m365" in salida, salida[:120])
+check("catalogo con margen", "Margen" in salida and "SKU:" in salida, salida[:150])
+
+# Tomamos un SKU real del catalogo para las pruebas siguientes, en vez de
+# uno fijo: CT cambia el catalogo y un SKU quemado envejece mal.
+ok_cat, catalogo = lic.consultar_catalogo(buscar="microsoft", limite=50, usar_cache=False)
+sku_prueba = None
+if ok_cat and catalogo:
+    con_costo = [p for p in catalogo if float(p.get("costo", 0) or 0) > 0]
+    if con_costo:
+        sku_prueba = con_costo[0]["sku"]
+        print(f"        usando SKU real: {sku_prueba} - {str(con_costo[0].get('nombre'))[:40]}")
+check("SKU real obtenido del catalogo", sku_prueba is not None,
+      "no se pudo leer el catalogo de licencias")
 
 # -------------------------------------------------------------
 paso(8, "cotizar_licencias + cotizar_pdf")
 salida = lic.cotizar_licencias(
-    paquetes=[{"paquete": "m365_business_standard", "puestos": 3}],
-    cliente_id=cid, generar_pdf=True, notas="Licencias de prueba")
+    paquetes=[{"paquete": sku_prueba, "puestos": 3}],
+    cliente_id=cid, generar_pdf=True, notas="Licencias de prueba") if sku_prueba else "omitido: sin SKU"
 print("   " + salida.replace("\n", "\n   ")[:900])
 check("PDF generado", ".pdf" in salida.lower(), salida[:150])
 check("resumen de margen presente", "Margen" in salida, salida[:150])
@@ -178,8 +190,8 @@ if ok and datos:
 # -------------------------------------------------------------
 paso(9, "registrar_licencia")
 salida = lic.registrar_licencia(
-    cliente_id=cid, paquete="m365_business_standard", puestos=3,
-    renovacion_auto=False, notas="Licencia de prueba")
+    cliente_id=cid, paquete=sku_prueba, puestos=3,
+    renovacion_auto=False, notas="Licencia de prueba") if sku_prueba else "omitido: sin SKU"
 print("   " + salida.replace("\n", "\n   "))
 check("licencia registrada", "Licencia registrada" in salida, salida[:120])
 
