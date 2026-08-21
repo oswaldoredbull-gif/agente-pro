@@ -14,9 +14,16 @@ import json
 import requests
 from datetime import datetime
 
-# Configuración de Supabase
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://ovfuahmjvnlpmxsospsx.supabase.co") + "/rest/v1"
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92ZnVhaG1qdm5scG14c29zcHN4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwODk0ODksImV4cCI6MjA5NTY2NTQ4OX0.QiPqZKqwuFNXsIZHMiJ_5QXY1p9ah6KEXP3o135i0Jc")
+# Configuración de Supabase.
+# Sin valores por defecto a proposito: las credenciales van SOLO en el .env,
+# nunca en el codigo. Este archivo vive en un repo publico.
+_URL_BASE = (os.environ.get("SUPABASE_URL") or "").rstrip("/")
+SUPABASE_URL = f"{_URL_BASE}/rest/v1" if _URL_BASE else ""
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY") or ""
+
+if not _URL_BASE or not SUPABASE_KEY:
+    print("  db_supabase: faltan SUPABASE_URL o SUPABASE_KEY en el .env; "
+          "las funciones de base de datos no van a responder.")
 
 HEADERS = {
     "apikey": SUPABASE_KEY,
