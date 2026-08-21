@@ -471,11 +471,24 @@ def buscar_productos(buscar="", tipo="toner", marca="", modelo_impresora="", lim
     return "\n".join(lineas)
 
 
+def _normalizar_item(item):
+    """
+    El modelo a veces manda los items como texto suelto ("TMX-HP-CE285A-V")
+    en vez de objeto. Aceptamos ambas formas.
+    """
+    if isinstance(item, str):
+        return {"sku": item.strip()}
+    if isinstance(item, dict):
+        return dict(item)
+    return {"descripcion": str(item)}
+
+
 def _resolver_sku(item):
     """
     Si el item trae 'sku', completa descripcion, precio y costo desde el catalogo.
     Devuelve (ok, item_resuelto_o_mensaje). Usada por crear_cotizacion.
     """
+    item = _normalizar_item(item)
     sku = str(item.get("sku") or "").strip()
     if not sku:
         return True, item
@@ -518,6 +531,10 @@ def crear_cotizacion(items, cliente_id=None, prospecto_id=None,
     if not items:
         return False, "La cotizacion necesita al menos un item."
 
+    # Tolerar que llegue un solo item suelto en vez de una lista.
+    if isinstance(items, (str, dict)):
+        items = [items]
+
     limpios = []
     subtotal = 0.0
     costo_total = 0.0
@@ -529,6 +546,9 @@ def crear_cotizacion(items, cliente_id=None, prospecto_id=None,
             return False, it
 
         desc = str(it.get("descripcion") or "Concepto").strip()
+        if desc == "Concepto" and not it.get("sku"):
+            return False, ("Cada concepto necesita un SKU del catalogo o una descripcion. "
+                           "Usa buscar_productos o listar_paquetes_licencias para obtener el SKU.")
         try:
             cant = float(it.get("cantidad", 1) or 1)
         except (TypeError, ValueError):
@@ -855,7 +875,7 @@ TOOLS_VENTAS = [
             "properties": {
                 "items": {
                     "type": "array",
-                    "description": "Conceptos a cotizar",
+                    "description": "Conceptos a cotizar. Cada elemento debe ser un OBJETO, no texto suelto: {\"sku\": \"TMX-HP-CE285A-V\", \"cantidad\": 5}",
                     "items": {
                         "type": "object",
                         "properties": {

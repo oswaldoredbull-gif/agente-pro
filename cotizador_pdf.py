@@ -269,7 +269,7 @@ TOOL_COTIZADOR_PDF = {
         "properties": {
             "items": {
                 "type": "array",
-                "description": "Conceptos a cotizar. Omitir si se usa cotizacion_id.",
+                "description": "Conceptos a cotizar. Cada elemento debe ser un OBJETO, no texto suelto: {\"sku\": \"TMX-HP-CE285A-V\", \"cantidad\": 5}. Omitir si se usa cotizacion_id.",
                 "items": {
                     "type": "object",
                     "properties": {
