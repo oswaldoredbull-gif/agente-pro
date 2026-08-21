@@ -220,6 +220,9 @@ def listar_paquetes_licencias(software="", puestos=1, categoria="", limite=25):
         m = calcular_margen(p.get("costo", 0), p.get("precio", 0), puestos)
         promo = "  [PROMOCION]" if p.get("en_promocion") else ""
         lineas.append(f"\n{p.get('nombre', 'Sin nombre')[:62]}{promo}")
+        # La descripcion de CT trae la edicion real (Personal, Family, Business...)
+        if p.get("descripcion"):
+            lineas.append(f"  {str(p['descripcion'])[:70]}")
         lineas.append(f"  SKU: {p.get('sku')} | {p.get('marca', '')} | {p.get('categoria', '')}")
         lineas.append(
             f"  Costo: {_money(m['costo_total'])} | "
