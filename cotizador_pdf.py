@@ -261,7 +261,8 @@ TOOL_COTIZADOR_PDF = {
     "description": (
         "Genera una cotizacion de DSS en PDF con formato profesional y la guarda en la carpeta "
         "'cotizaciones'. Usala cuando pidan una cotizacion formal, un PDF o algo para enviar al cliente. "
-        "Puede crear una cotizacion nueva a partir de 'items' o regenerar el PDF de una existente con 'cotizacion_id'."
+        "Puede crear una cotizacion nueva a partir de 'items' o regenerar el PDF de una existente con 'cotizacion_id'. "
+        "Para productos del catalogo pasa solo el SKU en cada item: el precio y el costo se toman del catalogo, nunca los inventes."
     ),
     "input_schema": {
         "type": "object",
@@ -272,13 +273,14 @@ TOOL_COTIZADOR_PDF = {
                 "items": {
                     "type": "object",
                     "properties": {
-                        "descripcion": {"type": "string", "description": "Descripcion del concepto"},
+                        "sku": {"type": "string", "description": "SKU del catalogo DSS. Si lo pasas, descripcion, precio y costo salen solos del catalogo"},
+                        "descripcion": {"type": "string", "description": "Descripcion del concepto. Solo si no hay SKU"},
                         "cantidad": {"type": "number", "description": "Cantidad", "default": 1},
-                        "precio_unitario": {"type": "number", "description": "Precio de venta unitario sin IVA"},
-                        "costo_unitario": {"type": "number", "description": "Costo unitario, para calcular margen", "default": 0},
+                        "precio_unitario": {"type": "number", "description": "Precio de venta unitario sin IVA. Solo si no hay SKU"},
+                        "costo_unitario": {"type": "number", "description": "Costo unitario, para calcular margen. Solo si no hay SKU", "default": 0},
                         "producto_id": {"type": "integer", "description": "ID del producto en catalogo, si aplica"}
                     },
-                    "required": ["descripcion", "precio_unitario"]
+                    "required": []
                 }
             },
             "cotizacion_id": {"type": "integer", "description": "ID de una cotizacion ya existente"},

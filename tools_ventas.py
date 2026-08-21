@@ -411,7 +411,97 @@ def registrar_cliente(nombre, contacto="", email="", telefono="", rfc="",
 
 
 # =============================================================
-# 6. COTIZAR EN TEXTO
+# 6. BUSCAR EN EL CATALOGO DE PRODUCTOS (toners y consumibles)
+# =============================================================
+
+def buscar_productos(buscar="", tipo="toner", marca="", modelo_impresora="", limite=20):
+    """Busca en el catalogo propio de DSS: toners, refacciones y servicios."""
+    try:
+        limite = max(1, min(int(limite), 60))
+    except (TypeError, ValueError):
+        limite = 20
+
+    params = f"select=*&activo=is.true&order=nombre.asc&limit={limite}"
+    if tipo:
+        params += f"&tipo=eq.{tipo}"
+    if marca:
+        params += f"&marca=ilike.*{marca}*"
+    if modelo_impresora:
+        params += f"&modelo_compatible=ilike.*{modelo_impresora}*"
+    if buscar:
+        termino = buscar.strip().replace(",", " ")
+        params += (f"&or=(nombre.ilike.*{termino}*,sku.ilike.*{termino}*,"
+                   f"modelo_compatible.ilike.*{termino}*)")
+
+    ok, datos = _sb_get("productos", params)
+    if not ok:
+        return f"No se pudo leer el catalogo de productos. {datos}"
+
+    ok_t, todos = _sb_get("productos", "select=id&activo=is.true&limit=200")
+    total = len(todos) if ok_t else None
+
+    if not datos:
+        filtro = buscar or modelo_impresora or marca or tipo or "todo"
+        return (
+            f"La busqueda de '{filtro}' no devolvio resultados en el catalogo propio.\n\n"
+            f"OJO: esto NO significa que DSS no venda ese producto. El catalogo tiene "
+            f"{total if total else 'varios'} productos activos.\n"
+            f"Reintenta con menos palabras (ej: '85A' o 'CE285A' en vez de "
+            f"'toner HP 85A negro'), o busca por modelo de impresora.\n"
+            f"Si aun asi no aparece, di que no lo encontraste en el catalogo, no que no se vende."
+        )
+
+    lineas = [f"CATALOGO DSS ({len(datos)} de {total if total else '?'} productos, precios SIN IVA)",
+              "=" * 76]
+    for p in datos:
+        costo = float(p.get("costo", 0) or 0)
+        precio = float(p.get("precio", 0) or 0)
+        mg = round((precio - costo) / precio * 100, 1) if precio else 0
+        lineas.append(f"\n{p.get('nombre', '')}")
+        lineas.append(f"  SKU: {p.get('sku')} | {p.get('marca', '')} | "
+                      f"{p.get('rendimiento_paginas') or '?'} pags")
+        if p.get("modelo_compatible"):
+            lineas.append(f"  Compatible: {p['modelo_compatible']}")
+        lineas.append(f"  Costo: {_money(costo)} | Venta: {_money(precio)} | "
+                      f"Margen: {_money(precio - costo)} ({mg}%)")
+
+    lineas.append("")
+    lineas.append("Para cotizar, pasa el SKU en los items de cotizar_texto o cotizar_pdf; "
+                  "el precio y el costo se toman solos del catalogo.")
+    return "\n".join(lineas)
+
+
+def _resolver_sku(item):
+    """
+    Si el item trae 'sku', completa descripcion, precio y costo desde el catalogo.
+    Devuelve (ok, item_resuelto_o_mensaje). Usada por crear_cotizacion.
+    """
+    sku = str(item.get("sku") or "").strip()
+    if not sku:
+        return True, item
+
+    ok, datos = _sb_get("productos", f"select=*&sku=eq.{sku}&limit=1")
+    if not ok:
+        return False, f"No se pudo consultar el SKU {sku}. {datos}"
+    if not datos:
+        return False, (f"El SKU '{sku}' no existe en el catalogo. "
+                       f"Usa buscar_productos para ver los disponibles.")
+
+    p = datos[0]
+    resuelto = dict(item)
+    resuelto.setdefault("descripcion", f"{p.get('nombre')} ({p.get('sku')})")
+    if not resuelto.get("descripcion"):
+        resuelto["descripcion"] = f"{p.get('nombre')} ({p.get('sku')})"
+    if resuelto.get("precio_unitario") in (None, "", 0):
+        resuelto["precio_unitario"] = float(p.get("precio", 0) or 0)
+    if resuelto.get("costo_unitario") in (None, "", 0):
+        resuelto["costo_unitario"] = float(p.get("costo", 0) or 0)
+    resuelto["producto_id"] = p.get("id")
+    return True, resuelto
+
+
+# =============================================================
+# 7. COTIZAR EN TEXTO
 # =============================================================
 
 def _folio_nuevo():
@@ -433,6 +523,11 @@ def crear_cotizacion(items, cliente_id=None, prospecto_id=None,
     costo_total = 0.0
 
     for it in items:
+        # Si viene con SKU, el precio y el costo salen del catalogo.
+        ok_sku, it = _resolver_sku(it)
+        if not ok_sku:
+            return False, it
+
         desc = str(it.get("descripcion") or "Concepto").strip()
         try:
             cant = float(it.get("cantidad", 1) or 1)
@@ -728,6 +823,28 @@ TOOLS_VENTAS = [
         }
     },
     {
+        "name": "buscar_productos",
+        "description": (
+            "Busca en el catalogo propio de DSS: toners compatibles, refacciones y servicios, "
+            "con SKU, costo, precio de venta y margen. Cada toner existe en dos lineas: "
+            "-E (Elite) y -V (Caja VDE), con costos distintos. "
+            "USALA SIEMPRE antes de cotizar un toner: nunca inventes ni pidas precios al usuario, "
+            "salen del catalogo. Puedes buscar por nombre, SKU, clave del toner (85A, CE285A) "
+            "o por modelo de impresora."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "buscar": {"type": "string", "description": "Texto: nombre, SKU o clave (ej: 85A, CE285A, TN660)", "default": ""},
+                "tipo": {"type": "string", "description": "toner, licencia, servicio o refaccion. Vacio para todos", "default": "toner"},
+                "marca": {"type": "string", "description": "Filtrar por marca (HP, Brother, Samsung)", "default": ""},
+                "modelo_impresora": {"type": "string", "description": "Modelo de impresora del cliente (ej: M404dn)", "default": ""},
+                "limite": {"type": "integer", "description": "Maximo de resultados (1-60)", "default": 20}
+            },
+            "required": []
+        }
+    },
+    {
         "name": "cotizar_texto",
         "description": (
             "Crea una cotizacion de DSS y la devuelve en texto plano, calculando subtotal, IVA 16% y total. "
@@ -742,13 +859,14 @@ TOOLS_VENTAS = [
                     "items": {
                         "type": "object",
                         "properties": {
-                            "descripcion": {"type": "string", "description": "Descripcion del concepto"},
+                            "sku": {"type": "string", "description": "SKU del catalogo DSS. Si lo pasas, la descripcion, el precio y el costo se toman solos del catalogo y no hace falta nada mas"},
+                            "descripcion": {"type": "string", "description": "Descripcion del concepto. Solo si no hay SKU"},
                             "cantidad": {"type": "number", "description": "Cantidad", "default": 1},
-                            "precio_unitario": {"type": "number", "description": "Precio de venta unitario sin IVA"},
-                            "costo_unitario": {"type": "number", "description": "Costo unitario, para calcular margen", "default": 0},
+                            "precio_unitario": {"type": "number", "description": "Precio de venta unitario sin IVA. Solo si no hay SKU"},
+                            "costo_unitario": {"type": "number", "description": "Costo unitario, para calcular margen. Solo si no hay SKU", "default": 0},
                             "producto_id": {"type": "integer", "description": "ID del producto en catalogo, si aplica"}
                         },
-                        "required": ["descripcion", "precio_unitario"]
+                        "required": []
                     }
                 },
                 "cliente_id": {"type": "integer", "description": "ID del cliente"},
@@ -792,6 +910,9 @@ FUNCIONES_VENTAS = {
         a.get("telefono", ""), a.get("rfc", ""), a.get("direccion", ""),
         a.get("ciudad", "Guadalajara"), a.get("condiciones_pago", "contado"),
         a.get("prospecto_id")),
+    "buscar_productos": lambda a: buscar_productos(
+        a.get("buscar", ""), a.get("tipo", "toner"), a.get("marca", ""),
+        a.get("modelo_impresora", ""), a.get("limite", 20)),
     "cotizar_texto": lambda a: cotizar_texto(
         a["items"], a.get("cliente_id"), a.get("prospecto_id"),
         a.get("vigencia_dias", 15), a.get("notas", "")),
